@@ -63,3 +63,6 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_hearings_schedule ON hearings(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_conciliations_schedule ON conciliations(scheduled_at);
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, created_at DESC);
+
+ALTER TABLE hearings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_conciliations_case ON conciliations(case_id);
