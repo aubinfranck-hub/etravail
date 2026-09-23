@@ -1,7 +1,25 @@
 import { pool } from "../db.js";
 import { getUnreadNotificationCount } from "./notificationService.js";
 
+
+async function refreshDeadlineNotifications(role:string,userId:string){
+  const where=role==="ADMIN"?"":"AND c.assigned_to=$1";
+  const params=role==="ADMIN"?[]:[userId];
+  const r=await pool.query(`SELECT c.id,c.reference,c.due_at FROM cases c WHERE c.status<>'ARCHIVE' AND c.due_at IS NOT NULL AND c.due_at<=CURRENT_TIMESTAMP + INTERVAL '24 hours' ${where}`,params);
+  for(const row of r.rows){
+    const kind=new Date(row.due_at).getTime()<Date.now()?"RETARD":"ECHEANCE";
+    const subject=kind==="RETARD"?"Dossier en retard":"Échéance proche";
+    const body=kind==="RETARD"?`Le dossier ${row.reference} est en retard. Une action est requise.`:`Le dossier ${row.reference} arrive à échéance dans les prochaines 24 heures.`;
+    const targets=role==="ADMIN"?await pool.query("SELECT id FROM users WHERE role='ADMIN' AND active=true"): {rows:[{id:userId}]};
+    for(const target of targets.rows){
+      const exists=await pool.query(`SELECT 1 FROM notifications WHERE user_id=$1 AND case_id=$2 AND subject=$3 AND created_at>CURRENT_TIMESTAMP-INTERVAL '24 hours' LIMIT 1`,[target.id,row.id,subject]);
+      if(!exists.rowCount) await pool.query(`INSERT INTO notifications(user_id,case_id,channel,subject,body,sent_at) VALUES($1,$2,'IN_APP',$3,$4,CURRENT_TIMESTAMP)`,[target.id,row.id,subject,body]);
+    }
+  }
+}
+
 export async function getDashboard(role:string,userId:string){
+  await refreshDeadlineNotifications(role,userId);
   const params=role==="CITOYEN"||role==="GREFFE"||role==="MAGISTRAT"?[userId]:[];
   const where=role==="CITOYEN"?"WHERE claimant_id=$1":role==="ADMIN"?"":"WHERE assigned_to=$1";
   const cases=await pool.query(`SELECT status,COUNT(*)::int AS count FROM cases ${where} GROUP BY status ORDER BY status`,params);
