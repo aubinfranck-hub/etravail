@@ -66,3 +66,37 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, crea
 
 ALTER TABLE hearings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
 CREATE INDEX IF NOT EXISTS idx_conciliations_case ON conciliations(case_id);
+
+
+CREATE TABLE IF NOT EXISTS legal_sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(500) NOT NULL,
+  jurisdiction VARCHAR(120) NOT NULL DEFAULT 'COTE_D_IVOIRE',
+  source_type VARCHAR(80) NOT NULL,
+  official_url TEXT,
+  version_label VARCHAR(120),
+  published_at DATE,
+  effective_from DATE,
+  effective_to DATE,
+  content TEXT NOT NULL,
+  content_hash VARCHAR(128),
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_legal_sources_active ON legal_sources(active);
+CREATE INDEX IF NOT EXISTS idx_legal_sources_jurisdiction ON legal_sources(jurisdiction);
+CREATE INDEX IF NOT EXISTS idx_legal_sources_content ON legal_sources USING gin (to_tsvector('french', coalesce(content,'')));
+
+CREATE TABLE IF NOT EXISTS ai_assistance_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id),
+  case_id UUID REFERENCES cases(id) ON DELETE SET NULL,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  sources JSONB,
+  model VARCHAR(120),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_ai_assistance_user ON ai_assistance_logs(user_id, created_at DESC);
