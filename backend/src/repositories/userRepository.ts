@@ -18,6 +18,11 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
   return result.rows[0] ?? null;
 }
 
+export async function listUsers() {
+  const result = await pool.query("SELECT id,email,role,full_name,phone,active,created_at FROM users ORDER BY created_at DESC");
+  return result.rows;
+}
+
 export async function createUser(input: {
   email: string;
   passwordHash: string;
