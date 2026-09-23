@@ -36,7 +36,7 @@ export async function migrateDatabase(){
 }
 
 
-const LEGAL_CORPUS_URL = "https://legitrack.africa/?p=1787";
+const LEGAL_CORPUS_URL = "https://www.droit-afrique.com/uploads/RCI-Code-2015-travail1.pdf";
 const LEGAL_OFFICIAL_REFERENCE_URL = "https://cepici.ci/autre-code";
 
 function decodeHtml(value:string){
@@ -68,8 +68,10 @@ async function seedLegalCorpus(){
   if(Number(existing.rows[0]?.count??0)>0){ console.log("Legal corpus already seeded; skipping"); return; }
   const response=await fetch(LEGAL_CORPUS_URL,{signal:AbortSignal.timeout(30000)});
   if(!response.ok) throw new Error("LEGAL_CORPUS_FETCH_FAILED");
-  const html=await response.text();
-  const articles=parseLegalArticles(html);
+  const pdfBuffer=Buffer.from(await response.arrayBuffer());
+  const pdfModule:any=await import("pdf-parse");
+  const parsed=await pdfModule.default(pdfBuffer);
+  const articles=parseLegalArticles(parsed.text);
   if(articles.length<100) throw new Error("LEGAL_CORPUS_TOO_SMALL");
   const client=await pool.connect();
   try{
