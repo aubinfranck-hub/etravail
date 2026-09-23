@@ -1,6 +1,7 @@
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
+import {readDocumentData} from "../repositories/documentRepository.js";
 
 const root = process.env.DOCUMENT_STORAGE_PATH ?? "./storage/documents";
 
@@ -14,5 +15,7 @@ export async function saveDocument(buffer: Buffer, originalName: string) {
 }
 
 export async function readDocument(storageKey: string) {
+  const persistent=await readDocumentData(storageKey);
+  if(persistent)return persistent;
   return readFile(path.join(root, storageKey));
 }
