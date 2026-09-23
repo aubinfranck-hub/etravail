@@ -20,6 +20,7 @@ import {extractText} from "./services/ocrService.js";
 import {searchInDocuments} from "./services/searchService.js";
 import {getDashboard} from "./services/dashboardService.js";
 import {getDecisions,issueDecision} from "./services/decisionService.js";
+import {searchLegal,addLegalSource} from "./services/legalService.js";
 import {listAudit,writeAudit} from "./repositories/auditRepository.js";
 import {hasPermission,type Role} from "./auth/permissions.js";
 import type {CaseStatus} from "./domain/workflow.js";
@@ -91,6 +92,13 @@ router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req
 });
 router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
   try{res.json({data:await listUsers()});}catch(e){handleError(res,e,"Impossible de récupérer les utilisateurs");}
+});
+router.get("/api/v1/legal/sources",auth,permission("legal:read"),async(req:Req,res:express.Response)=>{
+  try{res.json({data:await searchLegal(String(req.query.q??""))});}catch(e){handleError(res,e,"Recherche juridique impossible");}
+});
+router.post("/api/v1/admin/legal/sources",auth,permission("legal:manage"),async(req:Req,res:express.Response)=>{
+  try{const source=await addLegalSource({...req.body,createdBy:req.user!.id});await writeAudit({actorId:req.user!.id,action:"LEGAL_SOURCE_CREATED",metadata:{sourceId:source.id,title:source.title}});res.status(201).json({data:source});}
+  catch(e){const c=e instanceof Error?e.message:"";res.status(c==="LEGAL_SOURCE_REQUIRED"?400:500).json({error:c==="LEGAL_SOURCE_REQUIRED"?"Titre, type et contenu sont obligatoires":"Impossible d'ajouter la source juridique"});}
 });
 router.get("/api/v1/search/documents",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await searchInDocuments(String(req.query.q??""))});}catch(e){handleError(res,e,"Recherche impossible");}});
 
