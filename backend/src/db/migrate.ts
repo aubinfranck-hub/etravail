@@ -75,11 +75,19 @@ async function seedLegalCorpus(){
   const response=await fetch(LEGAL_CORPUS_URL,{signal:AbortSignal.timeout(30000)});
   if(!response.ok) throw new Error("LEGAL_CORPUS_FETCH_FAILED");
   const pdfBuffer=Buffer.from(await response.arrayBuffer());
-  // @ts-ignore pdf-parse@1.1.1 has no bundled TypeScript declarations.
-  const pdfModule:any=await import("pdf-parse");
-  const parsed=await pdfModule.default(pdfBuffer);
-  console.log("Legal PDF parsed text length: "+String(parsed.text??"").length+" sample: "+String(parsed.text??"").slice(0,300).replace(/\s+/g," "));
-  const articles=parseLegalArticles(parsed.text);
+  // @ts-ignore pdfjs-dist ESM typing varies by installed version.
+  const pdfjs:any=await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loadingTask=pdfjs.getDocument({data:pdfBuffer,useWorkerFetch:false,isEvalSupported:false});
+  const pdf=await loadingTask.promise;
+  let parsedText="";
+  for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+    const page=await pdf.getPage(pageNo);
+    const content=await page.getTextContent();
+    parsedText+=content.items.map((item:any)=>typeof item.str==="string"?item.str:"").join(" ")+"\\n";
+  }
+  await pdf.destroy();
+  console.log("Legal PDF parsed text length: "+parsedText.length+" sample: "+parsedText.slice(0,300).replace(/\s+/g," "));
+  const articles=parseLegalArticles(parsedText);
   console.log("Legal corpus parser found "+articles.length+" article blocks");
   if(articles.length<10) throw new Error("LEGAL_CORPUS_TOO_SMALL");
   const client=await pool.connect();
