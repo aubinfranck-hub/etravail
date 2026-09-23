@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS parties (
 CREATE TABLE IF NOT EXISTS documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
   uploaded_by UUID REFERENCES users(id), filename VARCHAR(255) NOT NULL, storage_key TEXT NOT NULL,
-  mime_type VARCHAR(120), file_size BIGINT, ocr_text TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  mime_type VARCHAR(120), file_size BIGINT, file_data BYTEA, ocr_text TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS hearings (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_cases_reference ON cases(reference);
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_data BYTEA;
 CREATE INDEX IF NOT EXISTS idx_documents_case ON documents(case_id);
 CREATE INDEX IF NOT EXISTS idx_documents_ocr ON documents USING gin (to_tsvector('french', coalesce(ocr_text,'')));
 CREATE INDEX IF NOT EXISTS idx_audit_case ON audit_logs(case_id);
