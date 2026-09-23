@@ -1,0 +1,2 @@
+import {pool} from "../db.js";
+export async function listCalendar(caseId?:string){const args:any[]=[];let filter="";if(caseId){args.push(caseId);filter="AND x.case_id=$1";}const r=await pool.query(`SELECT * FROM ((SELECT h.id,h.case_id,h.scheduled_at,h.room,h.status,'AUDIENCE' AS type FROM hearings h) UNION ALL (SELECT c.id,c.case_id,c.scheduled_at,c.room,c.status,'CONCILIATION' AS type FROM conciliations c)) x WHERE x.scheduled_at>=CURRENT_TIMESTAMP ${filter} ORDER BY x.scheduled_at LIMIT 200`,args);return r.rows;}
