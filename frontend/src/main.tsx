@@ -1,19 +1,17 @@
 import React,{useEffect,useState} from "react";
 import {createRoot} from "react-dom/client";
-import {getDashboard,getCases,searchDocuments} from "./api";
+import {getDashboard,getCases,getCalendar,getNotifications,login,searchDocuments} from "./api";
 import "./styles.css";
 
-function App(){
- const [dashboard,setDashboard]=useState<any>(null),[cases,setCases]=useState<any[]>([]),[query,setQuery]=useState(""),[results,setResults]=useState<any[]>([]),[error,setError]=useState("");
- const user=JSON.parse(localStorage.getItem("etravail_user")||'{"role":"VISITEUR"}');
- useEffect(()=>{getDashboard().then(x=>setDashboard(x.data)).catch(()=>{});getCases().then(x=>setCases(x.data??[])).catch(e=>setError(e.message));},[]);
- async function search(){try{setResults((await searchDocuments(query)).data??[]);setError("")}catch(e:any){setError(e.message)}}
- return <main className="shell">
-  <header><div className="brand"><span className="mark">eT</span><div><strong>e-Travail</strong><small>Gestion numérique des dossiers de travail</small></div></div><div className="role">{user.role}</div></header>
-  <section className="hero"><div><span className="eyebrow">TABLEAU DE BORD</span><h1>Bienvenue dans e-Travail.</h1><p>Suivez les dossiers, les échéances et les pièces depuis un espace adapté à votre rôle.</p></div><div className="card"><span>DOSSIERS</span><strong>{cases.length}</strong><i>{dashboard?.upcomingHearings??0} audience(s) à venir</i></div></section>
-  <section><h2>Recherche documentaire</h2><div className="search"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher dans les pièces OCR"/><button onClick={search}>Rechercher</button></div>{error&&<p className="error">{error}</p>}<div className="results">{results.map(r=><article key={r.id}><b>{r.filename}</b><p>{r.excerpt}</p></article>)}</div></section>
-  <section><h2>Dossiers</h2><div className="grid">{cases.map(c=><article key={c.id}><small>{c.reference}</small><h3>{c.title}</h3><p>{c.status}</p></article>)}</div></section>
-  <footer>e-Travail — plateforme numérique de gestion et de suivi. Elle ne constitue pas un tribunal.</footer>
- </main>
-}
+function Login({onLogin}:{onLogin:()=>void}){const[e,setE]=useState("");const[p,setP]=useState("");const[err,setErr]=useState("");async function go(){try{await login(e,p);onLogin()}catch(x:any){setErr(x.message)}}return <main className="login"><div className="loginCard"><span className="mark">eT</span><h1>e-Travail</h1><p>Connexion à la plateforme</p><input placeholder="Email" value={e} onChange={x=>setE(x.target.value)}/><input type="password" placeholder="Mot de passe" value={p} onChange={x=>setP(x.target.value)}/><button onClick={go}>Se connecter</button>{err&&<p className="error">{err}</p>}</div></main>}
+
+function App(){const[ready,setReady]=useState(!!localStorage.getItem("etravail_token"));const[dashboard,setDashboard]=useState<any>(null),[cases,setCases]=useState<any[]>([]),[calendar,setCalendar]=useState<any[]>([]),[notifications,setNotifications]=useState<any[]>([]),[query,setQuery]=useState(""),[results,setResults]=useState<any[]>([]),[error,setError]=useState("");if(!ready)return <Login onLogin={()=>setReady(true)}/>;const user=JSON.parse(localStorage.getItem("etravail_user")||'{"role":"VISITEUR"}');useEffect(()=>{Promise.all([getDashboard(),getCases(),getCalendar(),getNotifications()]).then(([d,c,cal,n])=>{setDashboard(d.data);setCases(c.data??[]);setCalendar(cal.data??[]);setNotifications(n.data??[])}).catch(e=>setError(e.message))},[]);async function search(){try{setResults((await searchDocuments(query)).data??[])}catch(e:any){setError(e.message)}}function logout(){localStorage.removeItem("etravail_token");localStorage.removeItem("etravail_user");setReady(false)}
+return <main className="shell"><header><div className="brand"><span className="mark">eT</span><div><strong>e-Travail</strong><small>Gestion numérique des dossiers de travail</small></div></div><div><span className="role">{user.role}</span><button onClick={logout}>Déconnexion</button></div></header>
+<section className="hero"><div><span className="eyebrow">TABLEAU DE BORD</span><h1>Suivi numérique des dossiers de travail.</h1><p>Workflow, pièces, OCR, conciliations, audiences, notifications et traçabilité.</p></div><div className="card"><span>DOSSIERS</span><strong>{cases.length}</strong><i>{dashboard?.upcomingHearings??0} audience(s) à venir</i></div></section>
+<div className="stats"><article><small>NOTIFICATIONS</small><strong>{notifications.length}</strong></article><article><small>ÉVÉNEMENTS À VENIR</small><strong>{calendar.length}</strong></article><article><small>RÔLE</small><strong>{user.role}</strong></article></div>
+<section><h2>Recherche documentaire OCR</h2><div className="search"><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Rechercher dans les pièces"/><button onClick={search}>Rechercher</button></div>{error&&<p className="error">{error}</p>}<div className="results">{results.map(r=><article key={r.id}><b>{r.filename}</b><p>{r.excerpt}</p></article>)}</div></section>
+<section><h2>Calendrier</h2><div className="grid">{calendar.slice(0,6).map(x=><article key={x.type+x.id}><small>{x.type}</small><h3>{new Date(x.scheduled_at).toLocaleString("fr-FR")}</h3><p>{x.room||"Salle non renseignée"} · {x.status}</p></article>)}</div></section>
+<section><h2>Dossiers</h2><div className="grid">{cases.map(c=><article key={c.id}><small>{c.reference}</small><h3>{c.title}</h3><p>{c.status}</p></article>)}</div></section>
+<section><h2>Notifications récentes</h2><div className="results">{notifications.slice(0,6).map(n=><article key={n.id}><b>{n.subject}</b><p>{n.body}</p></article>)}</div></section>
+<footer>e-Travail — plateforme numérique de gestion et de suivi. Elle ne constitue pas un tribunal.</footer></main>}
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App/></React.StrictMode>);
