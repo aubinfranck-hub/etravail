@@ -11,6 +11,7 @@ export function registerDocument(input: {
   storageKey: string;
   mimeType?: string;
   fileSize?: number;
+  fileData?: Buffer;
 }) {
   const allowed = ["application/pdf","image/jpeg","image/png"];
   if (input.mimeType && !allowed.includes(input.mimeType)) throw new Error("FILE_TYPE_NOT_ALLOWED");
