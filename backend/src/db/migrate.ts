@@ -74,7 +74,7 @@ async function seedLegalCorpus(){
   if(Number(existing.rows[0]?.count??0)>0){ console.log("Legal corpus already seeded; skipping"); return; }
   const response=await fetch(LEGAL_CORPUS_URL,{signal:AbortSignal.timeout(30000)});
   if(!response.ok) throw new Error("LEGAL_CORPUS_FETCH_FAILED");
-  const pdfBuffer=Buffer.from(await response.arrayBuffer());
+  const pdfBuffer=new Uint8Array(await response.arrayBuffer());
   // @ts-ignore pdfjs-dist ESM typing varies by installed version.
   const pdfjs:any=await import("pdfjs-dist/legacy/build/pdf.mjs");
   const loadingTask=pdfjs.getDocument({data:pdfBuffer,useWorkerFetch:false,isEvalSupported:false});
