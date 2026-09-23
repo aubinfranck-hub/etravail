@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS cases (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), reference VARCHAR(60) UNIQUE NOT NULL,
   title VARCHAR(255) NOT NULL, claimant_id UUID NOT NULL REFERENCES users(id),
   status VARCHAR(40) NOT NULL DEFAULT 'BROUILLON',
+  assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+  assigned_role VARCHAR(30),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -56,6 +58,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_cases_reference ON cases(reference);
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS assigned_role VARCHAR(30);
+CREATE INDEX IF NOT EXISTS idx_cases_assigned_to ON cases(assigned_to);
 ALTER TABLE documents ADD COLUMN IF NOT EXISTS file_data BYTEA;
 CREATE INDEX IF NOT EXISTS idx_documents_case ON documents(case_id);
 CREATE INDEX IF NOT EXISTS idx_documents_ocr ON documents USING gin (to_tsvector('french', coalesce(ocr_text,'')));
