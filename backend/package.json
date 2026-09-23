@@ -25,6 +25,6 @@
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "@types/multer": "^2.0.0",
-    "pdf-parse": "^1.1.1"
+    "pdfjs-dist": "^5.4.149"
   }
 }
