@@ -69,6 +69,7 @@ async function seedLegalCorpus(){
   const response=await fetch(LEGAL_CORPUS_URL,{signal:AbortSignal.timeout(30000)});
   if(!response.ok) throw new Error("LEGAL_CORPUS_FETCH_FAILED");
   const pdfBuffer=Buffer.from(await response.arrayBuffer());
+  // @ts-ignore pdf-parse@1.1.1 has no bundled TypeScript declarations.
   const pdfModule:any=await import("pdf-parse");
   const parsed=await pdfModule.default(pdfBuffer);
   const articles=parseLegalArticles(parsed.text);
