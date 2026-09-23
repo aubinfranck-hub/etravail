@@ -56,7 +56,7 @@ export function parseLegalArticles(html:string){
     .replace(/\n[ \t]+/g,"\n")
     .trim();
 
-  const marker=/(?:^|[\n\f])\s*(?:ARTICLE|ART\.?)\s+(\d+(?:\.\d+)?)(?:\s*[-–—:.]*)?/gim;
+  const marker=/\b(?:Article|ARTICLE|Art\.)\s+(\d+(?:\.\d+)?)(?:\s*[-–—:.]*)?/g;
   const matches=[...text.matchAll(marker)];
   const articles:{number:string;content:string}[]=[];
   for(let i=0;i<matches.length;i++){
