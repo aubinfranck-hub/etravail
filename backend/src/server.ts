@@ -5,6 +5,10 @@ import { checkDatabase } from "./db.js";
 import { registerCitizen, authenticate } from "./services/userService.js";
 import { getParties, addParty } from "./services/partyService.js";
 import { getDocuments, registerDocument } from "./services/documentService.js";
+import { getHearings, scheduleHearing } from "./services/hearingService.js";
+import { getNotifications, notify } from "./services/notificationService.js";
+import { saveDocument } from "./storage/localStorage.js";
+import multer from "multer";
 import { getCases, openCase, transitionCase } from "./services/caseService.js";
 import type { CaseStatus } from "./domain/workflow.js";
 
@@ -14,6 +18,7 @@ const jwtSecret = process.env.JWT_SECRET ?? "development-only-change-me";
 
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
 type Role = "CITOYEN" | "GREFFE" | "MAGISTRAT" | "ADMIN";
 interface User { id: string; email: string; role: Role; }
@@ -124,6 +129,40 @@ app.post("/api/v1/cases/:id/documents", auth, permission("case:document"), async
     if(code==="FILE_TOO_LARGE") return res.status(413).json({error:"Fichier trop volumineux"});
     res.status(500).json({error:"Impossible d'enregistrer la pièce"});
   }
+});
+
+
+app.get("/api/v1/cases/:id/hearings", auth, permission("case:read"), async (req, res) => {
+  try { res.json({ data: await getHearings(req.params.id) }); }
+  catch { res.status(500).json({ error: "Impossible de récupérer les audiences" }); }
+});
+
+app.post("/api/v1/cases/:id/hearings", auth, permission("case:transition"), async (req, res) => {
+  if (!req.body?.scheduledAt) return res.status(400).json({ error: "scheduledAt est obligatoire" });
+  try { res.status(201).json({ data: await scheduleHearing({ caseId:req.params.id, scheduledAt:req.body.scheduledAt, room:req.body.room }) }); }
+  catch(error) { const code=error instanceof Error?error.message:"UNKNOWN"; if(code==="INVALID_DATE"||code==="DATE_IN_PAST") return res.status(400).json({error:"Date d'audience invalide"}); res.status(500).json({error:"Impossible de programmer l'audience"}); }
+});
+
+app.get("/api/v1/notifications", auth, async (req: AuthedRequest, res) => {
+  try { res.json({ data: await getNotifications(req.user!.id) }); }
+  catch { res.status(500).json({ error: "Impossible de récupérer les notifications" }); }
+});
+
+app.post("/api/v1/notifications", auth, permission("case:transition"), async (req, res) => {
+  if (!req.body?.userId || !req.body?.subject || !req.body?.body) return res.status(400).json({error:"userId, subject et body sont obligatoires"});
+  try { res.status(201).json({data:await notify({userId:req.body.userId,caseId:req.body.caseId,channel:req.body.channel??"IN_APP",subject:req.body.subject,body:req.body.body})}); }
+  catch(error) { if(error instanceof Error && error.message==="INVALID_CHANNEL") return res.status(400).json({error:"Canal invalide"}); res.status(500).json({error:"Impossible de créer la notification"}); }
+});
+
+app.post("/api/v1/cases/:id/documents/upload", auth, permission("case:document"), upload.single("file"), async (req: AuthedRequest, res) => {
+  if (!req.file) return res.status(400).json({error:"Fichier obligatoire"});
+  const allowed=["application/pdf","image/jpeg","image/png"];
+  if (!allowed.includes(req.file.mimetype)) return res.status(415).json({error:"Type de fichier non autorisé"});
+  try {
+    const storageKey=await saveDocument(req.file.buffer,req.file.originalname);
+    const data=await registerDocument({caseId:req.params.id,uploadedBy:req.user!.id,filename:req.file.originalname,storageKey,mimeType:req.file.mimetype,fileSize:req.file.size});
+    res.status(201).json({data,ocr:{status:"PENDING"}});
+  } catch { res.status(500).json({error:"Impossible de stocker le document"}); }
 });
 
 app.post("/api/v1/cases/:id/transition", auth, permission("case:transition"), async (req: AuthedRequest, res) => {
