@@ -15,7 +15,7 @@ export async function addLegalSource(input:any){
     title:String(input.title).trim(),
     jurisdiction:String(input.jurisdiction??"COTE_D_IVOIRE"),
     sourceType:String(input.sourceType),
-    officialUrl:input.officialUrl,
+    officialUrl:validateOfficialUrl(input.officialUrl),
     versionLabel:input.versionLabel,
     publishedAt:input.publishedAt,
     effectiveFrom:input.effectiveFrom,
@@ -28,6 +28,13 @@ export async function addLegalSource(input:any){
 
 
 import {logAIAssistance} from "../repositories/legalRepository.js";
+
+function validateOfficialUrl(value: unknown) {
+  if (value == null || value === "") return undefined;
+  const url = new URL(String(value));
+  if (!["https:", "http:"].includes(url.protocol)) throw new Error("INVALID_SOURCE_URL");
+  return url.toString();
+}
 
 export async function assistLegal(input:{userId:string;question:string;caseId?:string}){
   const question=input.question.trim();
