@@ -1,0 +1,34 @@
+-- e-Travail — schéma conceptuel initial
+CREATE TABLE users (
+  id UUID PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  role VARCHAR(30) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE cases (
+  id UUID PRIMARY KEY,
+  title VARCHAR(255) NOT NULL,
+  claimant_id UUID NOT NULL REFERENCES users(id),
+  status VARCHAR(40) NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE documents (
+  id UUID PRIMARY KEY,
+  case_id UUID NOT NULL REFERENCES cases(id),
+  filename VARCHAR(255) NOT NULL,
+  storage_key TEXT NOT NULL,
+  mime_type VARCHAR(120),
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE audit_logs (
+  id UUID PRIMARY KEY,
+  actor_id UUID REFERENCES users(id),
+  case_id UUID REFERENCES cases(id),
+  action VARCHAR(100) NOT NULL,
+  metadata JSONB,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
