@@ -120,3 +120,62 @@ CREATE TABLE IF NOT EXISTS ai_assistance_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_ai_assistance_user ON ai_assistance_logs(user_id, created_at DESC);
+
+
+-- e-Travail workflow control v1
+CREATE TABLE IF NOT EXISTS workflow_requirements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  status VARCHAR(40) NOT NULL,
+  nature_code VARCHAR(60),
+  code VARCHAR(100) NOT NULL,
+  label VARCHAR(255) NOT NULL,
+  required BOOLEAN NOT NULL DEFAULT TRUE,
+  deadline_hours INTEGER,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE(status,nature_code,code)
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_requirements_lookup ON workflow_requirements(status,nature_code,active);
+
+CREATE TABLE IF NOT EXISTS case_requirements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  requirement_id UUID NOT NULL REFERENCES workflow_requirements(id),
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING' CHECK(status IN ('PENDING','RECEIVED','VALIDATED','REJECTED')),
+  document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+  validated_by UUID REFERENCES users(id),
+  validated_at TIMESTAMPTZ,
+  rejection_reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(case_id,requirement_id)
+);
+CREATE INDEX IF NOT EXISTS idx_case_requirements_case ON case_requirements(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_requirements_status ON case_requirements(status);
+
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS nature_code VARCHAR(60) DEFAULT 'AUTRE';
+ALTER TABLE cases ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_cases_due_at ON cases(due_at);
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id,read_at,created_at DESC);
+
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_role VARCHAR(30);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address INET;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT;
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS previous_hash VARCHAR(128);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS event_hash VARCHAR(128);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS case_assignments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
+  assigned_role VARCHAR(30),
+  assigned_by UUID REFERENCES users(id),
+  assignment_type VARCHAR(20) NOT NULL DEFAULT 'MANUAL' CHECK(assignment_type IN ('MANUAL','AUTO','REASSIGNMENT')),
+  reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_case_assignments_case ON case_assignments(case_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_case_assignments_user ON case_assignments(assigned_to,created_at DESC);
