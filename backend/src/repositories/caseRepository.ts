@@ -55,6 +55,6 @@ export async function updateCaseStatus(id: string, status: string): Promise<Case
 }
 
 export async function assignCase(id:string, assignedTo:string|null, assignedRole:string|null):Promise<CaseRecord|null>{
-  const r=await pool.query(`UPDATE cases SET assigned_to=$2, assigned_role=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING id,reference,title,claimant_id,status,assigned_to,assigned_role,created_at,updated_at`,[id,assignedTo,assignedRole]);
+  const r=await pool.query(`UPDATE cases SET assigned_to=$2, assigned_role=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING id,reference,title,claimant_id,status,assigned_to,assigned_role,nature_code,due_at,created_at,updated_at`,[id,assignedTo,assignedRole]);
   return r.rows[0]??null;
 }
