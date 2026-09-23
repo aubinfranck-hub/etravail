@@ -8,11 +8,13 @@ export interface CaseRecord {
   status: string;
   created_at: string;
   updated_at: string;
+  assigned_to?: string | null;
+  assigned_role?: string | null;
 }
 
 export async function listCases(): Promise<CaseRecord[]> {
   const result = await pool.query(
-    "SELECT id, reference, title, claimant_id, status, created_at, updated_at FROM cases ORDER BY created_at DESC"
+    "SELECT id, reference, title, claimant_id, status, assigned_to, assigned_role, created_at, updated_at FROM cases ORDER BY created_at DESC"
   );
   return result.rows;
 }
@@ -25,7 +27,7 @@ export async function createCase(input: {
   const result = await pool.query(
     `INSERT INTO cases (reference, title, claimant_id)
      VALUES ($1, $2, $3)
-     RETURNING id, reference, title, claimant_id, status, created_at, updated_at`,
+     RETURNING id, reference, title, claimant_id, status, assigned_to, assigned_role, created_at, updated_at`,
     [input.reference, input.title, input.claimantId]
   );
   return result.rows[0];
@@ -47,4 +49,9 @@ export async function updateCaseStatus(id: string, status: string): Promise<Case
     [status, id]
   );
   return result.rows[0] ?? null;
+}
+
+export async function assignCase(id:string, assignedTo:string|null, assignedRole:string|null):Promise<CaseRecord|null>{
+  const r=await pool.query(`UPDATE cases SET assigned_to=$2, assigned_role=$3, updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING id,reference,title,claimant_id,status,assigned_to,assigned_role,created_at,updated_at`,[id,assignedTo,assignedRole]);
+  return r.rows[0]??null;
 }
