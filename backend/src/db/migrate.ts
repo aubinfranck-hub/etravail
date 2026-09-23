@@ -20,6 +20,34 @@ async function seedUser(email:string,password:string,role:"ADMIN"|"CITOYEN",full
   console.log(`e-Travail bootstrap user created: ${email} (${role})`);
 }
 
+
+async function seedWorkflowRequirements(){
+  const defaults=[
+    ["IDENTITE","Pièce d'identité du demandeur",true,48,10],
+    ["CONTRAT_TRAVAIL","Contrat de travail ou justificatif de relation de travail",true,48,20],
+    ["JUSTIFICATIF_LITIGE","Justificatif principal du litige",true,48,30]
+  ];
+  const natures=["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HARCELEMENT","ACCIDENT_TRAVAIL","AUTRE"];
+  for(const nature of natures){
+    for(const [code,label,required,hours,order] of defaults){
+      await pool.query(`INSERT INTO workflow_requirements(status,nature_code,code,label,required,deadline_hours,sort_order)
+        VALUES('SOUMIS',$1,$2,$3,$4,$5,$6) ON CONFLICT(status,nature_code,code) DO UPDATE SET label=EXCLUDED.label,required=EXCLUDED.required,deadline_hours=EXCLUDED.deadline_hours,sort_order=EXCLUDED.sort_order,active=true`,
+        [nature,code,label,required,hours,order]);
+    }
+  }
+  const extras=[
+    ["ACCIDENT_TRAVAIL","CERTIFICAT_MEDICAL","Certificat médical / constat de l'accident",true,48,40],
+    ["HARCELEMENT","ELEMENTS_HARCELEMENT","Éléments ou faits documentant le signalement",true,48,40],
+    ["SALAIRE_IMPAYE","BULLETINS_SALAIRE","Bulletins de salaire / justificatifs de rémunération",true,48,40]
+  ];
+  for(const [nature,code,label,required,hours,order] of extras){
+    await pool.query(`INSERT INTO workflow_requirements(status,nature_code,code,label,required,deadline_hours,sort_order)
+      VALUES('SOUMIS',$1,$2,$3,$4,$5,$6) ON CONFLICT(status,nature_code,code) DO UPDATE SET label=EXCLUDED.label,required=EXCLUDED.required,deadline_hours=EXCLUDED.deadline_hours,sort_order=EXCLUDED.sort_order,active=true`,
+      [nature,code,label,required,hours,order]);
+  }
+  console.log("Workflow requirements seeded");
+}
+
 export async function migrateDatabase(){
   const here=path.dirname(fileURLToPath(import.meta.url));
   const schema=await fs.readFile(path.resolve(here,"../../../database/schema.sql"),"utf8");
@@ -32,6 +60,7 @@ export async function migrateDatabase(){
 
   if(adminEmail&&adminPassword) await seedUser(adminEmail,adminPassword,"ADMIN","Administrateur e-Travail");
   if(userEmail&&userPassword) await seedUser(userEmail,userPassword,"CITOYEN","Utilisateur test e-Travail");
+  await seedWorkflowRequirements();
   await seedLegalCorpus();
   await seedLabourAmendment2021();
 }
