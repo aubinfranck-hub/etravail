@@ -36,7 +36,7 @@ export async function migrateDatabase(){
 }
 
 
-const LEGAL_CORPUS_URL = "https://www.famille.gouv.ci/public/front/docs/RCI-Code-2015-travail.pdf";
+const LEGAL_CORPUS_URL = "https://www.economie-ivoirienne.ci/sites/default/files/sites/default/files/inline-files/Le-code-du-travail-ivoirien-13-05-17.pdf";
 const LEGAL_OFFICIAL_REFERENCE_URL = "https://www.famille.gouv.ci/public/front/docs/RCI-Code-2015-travail.pdf";
 
 function decodeHtml(value:string){
