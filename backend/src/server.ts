@@ -28,7 +28,7 @@ app.use(express.json({limit:"2mb"}));
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:20*1024*1024}});
 const router:any=app;
 type User={id:string;email:string;role:Role;};
-type Req=express.Request&{user?:User};
+type Req=express.Request<Record<string,string>>&{user?:User};
 
 function auth(req:Req,res:express.Response,next:express.NextFunction){const h=req.headers.authorization;if(!h?.startsWith("Bearer "))return res.status(401).json({error:"Authentification requise"});try{req.user=jwt.verify(h.slice(7),jwtSecret) as User;next();}catch{return res.status(401).json({error:"Jeton invalide"});}}
 function permission(p:string){return (req:Req,res:express.Response,next:express.NextFunction)=>req.user&&hasPermission(req.user.role,p)?next():res.status(403).json({error:"Permission refusée"});}
