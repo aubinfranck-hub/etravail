@@ -82,4 +82,11 @@ router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,
 });
 router.get("/api/v1/search/documents",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await searchInDocuments(String(req.query.q??""))});}catch(e){handleError(res,e,"Recherche impossible");}});
 
-app.listen(port,()=>console.log(`e-Travail API listening on :${port}`));
+async function bootstrap(){
+  try{
+    await checkDatabase();
+    console.log("Database connection verified");
+  }catch(error){console.error("Database connection failed",error);process.exit(1)}
+  app.listen(port,()=>console.log(`e-Travail API listening on :${port}`));
+}
+bootstrap();
