@@ -2,6 +2,9 @@ import express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
 import { checkDatabase } from "./db.js";
+import { registerCitizen, authenticate } from "./services/userService.js";
+import { getParties, addParty } from "./services/partyService.js";
+import { getDocuments, registerDocument } from "./services/documentService.js";
 import { getCases, openCase, transitionCase } from "./services/caseService.js";
 import type { CaseStatus } from "./domain/workflow.js";
 
@@ -61,7 +64,7 @@ app.get("/api/v1/health", async (_req, res) => {
   });
 });
 
-// Développement uniquement. À remplacer par une authentification de production.
+app.post("/api/v1/auth/register", async (req, res) => {\n  if (!req.body?.email || !req.body?.password) return res.status(400).json({ error: "email et password sont obligatoires" });\n  try { const user = await registerCitizen(req.body); res.status(201).json({ data: { id:user.id,email:user.email,role:user.role,fullName:user.full_name } }); }\n  catch (error) { const code=error instanceof Error?error.message:"UNKNOWN"; if(code==="EMAIL_EXISTS") return res.status(409).json({error:"Email déjà utilisé"}); if(code==="PASSWORD_TOO_SHORT") return res.status(400).json({error:"Mot de passe trop court"}); res.status(500).json({error:"Inscription impossible"}); }\n});\n\napp.post("/api/v1/auth/login", async (req, res) => {\n  if (!req.body?.email || !req.body?.password) return res.status(400).json({ error: "email et password sont obligatoires" });\n  try { const user = await authenticate(req.body.email, req.body.password); const token=jwt.sign({id:user.id,email:user.email,role:user.role},jwtSecret,{expiresIn:"8h"}); res.json({token,user:{id:user.id,email:user.email,role:user.role,fullName:user.full_name}}); }\n  catch { res.status(401).json({error:"Identifiants invalides"}); }\n});\n\n// Développement uniquement. À supprimer avant production.
 app.post("/api/v1/auth/dev-login", (req, res) => {
   const user = users.find(u => u.email === req.body?.email);
   if (!user) return res.status(401).json({ error: "Utilisateur de développement inconnu" });
@@ -90,6 +93,36 @@ app.post("/api/v1/cases", auth, permission("case:create"), async (req: AuthedReq
     res.status(201).json({ data: item });
   } catch {
     res.status(500).json({ error: "Impossible de créer le dossier" });
+  }
+});
+
+
+app.get("/api/v1/cases/:id/parties", auth, permission("case:read"), async (req, res) => {
+  try { res.json({ data: await getParties(req.params.id) }); }
+  catch { res.status(500).json({ error: "Impossible de récupérer les parties" }); }
+});
+
+app.post("/api/v1/cases/:id/parties", auth, permission("case:document"), async (req: AuthedRequest, res) => {
+  if (!req.body?.type || !req.body?.fullName) return res.status(400).json({ error: "type et fullName sont obligatoires" });
+  try { res.status(201).json({ data: await addParty({ caseId:req.params.id,type:req.body.type,fullName:req.body.fullName,contact:req.body.contact }) }); }
+  catch { res.status(500).json({ error: "Impossible d'ajouter la partie" }); }
+});
+
+app.get("/api/v1/cases/:id/documents", auth, permission("case:read"), async (req, res) => {
+  try { res.json({ data: await getDocuments(req.params.id) }); }
+  catch { res.status(500).json({ error: "Impossible de récupérer les pièces" }); }
+});
+
+app.post("/api/v1/cases/:id/documents", auth, permission("case:document"), async (req: AuthedRequest, res) => {
+  if (!req.body?.filename || !req.body?.storageKey) return res.status(400).json({ error: "filename et storageKey sont obligatoires" });
+  try {
+    const data=await registerDocument({caseId:req.params.id,uploadedBy:req.user!.id,filename:req.body.filename,storageKey:req.body.storageKey,mimeType:req.body.mimeType,fileSize:req.body.fileSize});
+    res.status(201).json({data});
+  } catch(error) {
+    const code=error instanceof Error?error.message:"UNKNOWN";
+    if(code==="FILE_TYPE_NOT_ALLOWED") return res.status(415).json({error:"Type de fichier non autorisé"});
+    if(code==="FILE_TOO_LARGE") return res.status(413).json({error:"Fichier trop volumineux"});
+    res.status(500).json({error:"Impossible d'enregistrer la pièce"});
   }
 });
 
