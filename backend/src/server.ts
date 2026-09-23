@@ -24,6 +24,7 @@ import { getNotifications, notify } from "./services/notificationService.js";
 import { saveDocument, readDocument } from "./storage/localStorage.js";
 import { extractText } from "./services/ocrService.js";
 import { updateOCRText } from "./repositories/documentRepository.js";
+import { searchInDocuments } from "./services/searchService.js";
 import multer from "multer";
 import { getCases, openCase, transitionCase } from "./services/caseService.js";
 import type { CaseStatus } from "./domain/workflow.js";
@@ -91,6 +92,12 @@ app.post("/api/v1/auth/dev-login", (req, res) => {
   if (!user) return res.status(401).json({ error: "Utilisateur de développement inconnu" });
   const token = jwt.sign(user, jwtSecret, { expiresIn: "8h" });
   res.json({ token, user });
+});
+
+app.get("/api/v1/search/documents", auth, permission("case:read"), async (req, res) => {
+  const q=String(req.query.q ?? "");
+  try { res.json({data:await searchInDocuments(q)}); }
+  catch(error) { if(error instanceof Error && error.message==="QUERY_TOO_SHORT") return res.status(400).json({error:"La recherche doit contenir au moins 2 caractères"}); res.status(500).json({error:"Recherche impossible"}); }
 });
 
 app.get("/api/v1/cases", auth, permission("case:read"), async (_req, res) => {
