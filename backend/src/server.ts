@@ -1,4 +1,18 @@
-import express from "express";
+imp
+
+app.post("/api/v1/documents/:documentId/ocr", auth, permission("case:document"), async (req: AuthedRequest, res) => {
+  try {
+    const documents=await getDocuments(req.body?.caseId);
+    const document=documents.find((d:any)=>d.id===req.params.documentId);
+    if (!document) return res.status(404).json({error:"Document introuvable"});
+    const buffer=await readDocument(document.storage_key);
+    const ocr=await extractText(buffer,"fra");
+    if (ocr.status==="COMPLETED") await updateOCRText(document.id,ocr.text);
+    res.json({data:{documentId:document.id,status:ocr.status,text:ocr.text,language:ocr.language}});
+  } catch {
+    res.status(500).json({error:"Échec du traitement OCR"});
+  }
+});ort express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
 import { checkDatabase } from "./db.js";
@@ -7,7 +21,9 @@ import { getParties, addParty } from "./services/partyService.js";
 import { getDocuments, registerDocument } from "./services/documentService.js";
 import { getHearings, scheduleHearing } from "./services/hearingService.js";
 import { getNotifications, notify } from "./services/notificationService.js";
-import { saveDocument } from "./storage/localStorage.js";
+import { saveDocument, readDocument } from "./storage/localStorage.js";
+import { extractText } from "./services/ocrService.js";
+import { updateOCRText } from "./repositories/documentRepository.js";
 import multer from "multer";
 import { getCases, openCase, transitionCase } from "./services/caseService.js";
 import type { CaseStatus } from "./domain/workflow.js";
@@ -161,7 +177,10 @@ app.post("/api/v1/cases/:id/documents/upload", auth, permission("case:document")
   try {
     const storageKey=await saveDocument(req.file.buffer,req.file.originalname);
     const data=await registerDocument({caseId:req.params.id,uploadedBy:req.user!.id,filename:req.file.originalname,storageKey,mimeType:req.file.mimetype,fileSize:req.file.size});
-    res.status(201).json({data,ocr:{status:"PENDING"}});
+    const ocr=await extractText(req.file.buffer,"fra");
+    if (ocr.status === "COMPLETED") await updateOCRText(data.id,ocr.text);
+    const finalData={...data,ocr_text:ocr.text};
+    res.status(201).json({data:finalData,ocr:{status:ocr.status,language:ocr.language}});
   } catch { res.status(500).json({error:"Impossible de stocker le document"}); }
 });
 
