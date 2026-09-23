@@ -78,6 +78,7 @@ async function seedLegalCorpus(){
   // @ts-ignore pdf-parse@1.1.1 has no bundled TypeScript declarations.
   const pdfModule:any=await import("pdf-parse");
   const parsed=await pdfModule.default(pdfBuffer);
+  console.log("Legal PDF parsed text length: "+String(parsed.text??"").length+" sample: "+String(parsed.text??"").slice(0,300).replace(/\s+/g," "));
   const articles=parseLegalArticles(parsed.text);
   console.log("Legal corpus parser found "+articles.length+" article blocks");
   if(articles.length<10) throw new Error("LEGAL_CORPUS_TOO_SMALL");
