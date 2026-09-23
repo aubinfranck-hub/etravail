@@ -36,7 +36,7 @@ export async function migrateDatabase(){
 }
 
 
-const LEGAL_CORPUS_URL = "https://www.droit-afrique.com/uploads/RCI-Code-2015-travail1.pdf";
+const LEGAL_CORPUS_URL = "https://cepici.ci/admin/pdf/codeinvestir/1741193063.pdf";
 const LEGAL_OFFICIAL_REFERENCE_URL = "https://cepici.ci/autre-code";
 
 function decodeHtml(value:string){
