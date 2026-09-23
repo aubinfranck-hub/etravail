@@ -1,7 +1,8 @@
 import { pool } from "../db.js";
 import { createCase, findCase, listCases, updateCaseStatus, assignCase } from "../repositories/caseRepository.js";
 import { writeAudit } from "../repositories/auditRepository.js";
-import { canTransition, CaseStatus, allowedRolesByTransition, stageForStatus } from "../domain/workflow.js";
+import { canTransition, allowedRolesByTransition, stageForStatus } from "../domain/workflow.js";
+import type { CaseStatus } from "../domain/workflow.js";
 import { notify } from "./notificationService.js";
 
 const NATURES = ["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HARCELEMENT","ACCIDENT_TRAVAIL","AUTRE"] as const;
