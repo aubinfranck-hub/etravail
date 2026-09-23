@@ -22,3 +22,5 @@ export async function getNotifications(){return api("/notifications");}
 export async function searchDocuments(q:string){return api(`/search/documents?q=${encodeURIComponent(q)}`);}
 export async function getUsers(){return api("/admin/users");}
 export async function updateUserAccess(id:string,data:{role:string;active:boolean}){return api(`/admin/users/${id}`,{method:"PATCH",body:JSON.stringify(data)});}
+export async function searchLegalSources(q:string){return api(`/legal/sources?q=${encodeURIComponent(q)}`);}
+export async function legalAssist(question:string,caseId?:string){return api("/ai/assist",{method:"POST",body:JSON.stringify({question,caseId})});}
