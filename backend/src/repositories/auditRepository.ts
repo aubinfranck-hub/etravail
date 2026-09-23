@@ -1,3 +1,0 @@
-import {pool} from "../db.js";
-export async function writeAudit(i:{actorId?:string;caseId?:string;action:string;metadata?:unknown}){await pool.query("INSERT INTO audit_logs(actor_id,case_id,action,metadata) VALUES($1,$2,$3,$4)",[i.actorId??null,i.caseId??null,i.action,i.metadata??null]);}
-export async function listAudit(caseId:string){const r=await pool.query(`SELECT a.id,a.case_id,a.action,a.metadata,a.created_at,u.full_name AS actor_name,u.role AS actor_role FROM audit_logs a LEFT JOIN users u ON u.id=a.actor_id WHERE a.case_id=$1 ORDER BY a.created_at DESC`,[caseId]);return r.rows;}
