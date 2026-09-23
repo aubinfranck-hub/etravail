@@ -18,14 +18,20 @@ export async function createDocument(input: {
   mimeType?: string;
   fileSize?: number;
   ocrText?: string | null;
+  fileData?: Buffer;
 }) {
   const result = await pool.query(
-    `INSERT INTO documents(case_id,uploaded_by,filename,storage_key,mime_type,file_size,ocr_text)
-     VALUES($1,$2,$3,$4,$5,$6,$7)
+    `INSERT INTO documents(case_id,uploaded_by,filename,storage_key,mime_type,file_size,file_data,ocr_text)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8)
      RETURNING id,case_id,uploaded_by,filename,storage_key,mime_type,file_size,ocr_text,created_at`,
-    [input.caseId,input.uploadedBy,input.filename,input.storageKey,input.mimeType ?? null,input.fileSize ?? null,input.ocrText ?? null]
+    [input.caseId,input.uploadedBy,input.filename,input.storageKey,input.mimeType ?? null,input.fileSize ?? null,input.fileData ?? null,input.ocrText ?? null]
   );
   return result.rows[0];
+}
+
+export async function readDocumentData(storageKey:string){
+  const result=await pool.query("SELECT file_data FROM documents WHERE storage_key=$1",[storageKey]);
+  return result.rows[0]?.file_data ? Buffer.from(result.rows[0].file_data) : null;
 }
 
 export async function updateOCRText(id: string, text: string | null) {
