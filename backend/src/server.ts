@@ -20,7 +20,7 @@ import {extractText} from "./services/ocrService.js";
 import {searchInDocuments} from "./services/searchService.js";
 import {getDashboard} from "./services/dashboardService.js";
 import {getDecisions,issueDecision} from "./services/decisionService.js";
-import {searchLegal,addLegalSource} from "./services/legalService.js";
+import {searchLegal,addLegalSource,assistLegal} from "./services/legalService.js";
 import {listAudit,writeAudit} from "./repositories/auditRepository.js";
 import {hasPermission,type Role} from "./auth/permissions.js";
 import type {CaseStatus} from "./domain/workflow.js";
@@ -95,6 +95,11 @@ router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,
 });
 router.get("/api/v1/legal/sources",auth,permission("legal:read"),async(req:Req,res:express.Response)=>{
   try{res.json({data:await searchLegal(String(req.query.q??""))});}catch(e){handleError(res,e,"Recherche juridique impossible");}
+});
+router.post("/api/v1/ai/assist",auth,permission("legal:read"),async(req:Req,res:express.Response)=>{
+  if(!req.body?.question)return res.status(400).json({error:"question obligatoire"});
+  try{res.json({data:await assistLegal({userId:req.user!.id,caseId:req.body.caseId,question:String(req.body.question)})});}
+  catch(e){handleError(res,e,"Assistance juridique indisponible");}
 });
 router.post("/api/v1/admin/legal/sources",auth,permission("legal:manage"),async(req:Req,res:express.Response)=>{
   try{const source=await addLegalSource({...req.body,createdBy:req.user!.id});await writeAudit({actorId:req.user!.id,action:"LEGAL_SOURCE_CREATED",metadata:{sourceId:source.id,title:source.title}});res.status(201).json({data:source});}
