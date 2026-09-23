@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import multer from "multer";
 import {checkDatabase} from "./db.js";
 import {registerCitizen,authenticate} from "./services/userService.js";
+import {listUsers} from "./repositories/userRepository.js";
 import {getCases,openCase,transitionCase} from "./services/caseService.js";
 import {findCase} from "./repositories/caseRepository.js";
 import {getParties,addParty} from "./services/partyService.js";
@@ -47,6 +48,19 @@ router.post("/api/v1/cases",auth,permission("case:create"),async(req:Req,res:exp
 router.post("/api/v1/cases/:id/transition",auth,async(req:Req,res:express.Response)=>{try{const current=await caseAccess(req,req.params.id,true);if(!current)return res.status(current===null?404:403).json({error:current===null?"Dossier introuvable":"Accès refusé"});const next=req.body?.status as CaseStatus;const citizenOwnSubmit=req.user!.role==="CITOYEN"&&current.status==="BROUILLON"&&next==="SOUMIS";if(!citizenOwnSubmit&&!hasPermission(req.user!.role,"case:transition"))return res.status(403).json({error:"Permission refusée"});const item=await transitionCase({id:req.params.id,next,actorId:req.user!.id});const c=await findCase(req.params.id);if(c)await notify({userId:c.claimant_id,caseId:c.id,channel:"IN_APP",subject:"Mise à jour du dossier",body:`Le dossier ${c.reference} est maintenant au statut ${item?.status}.`});res.json({data:item});}catch(e){handleError(res,e,"Impossible de modifier le dossier");}});
 router.get("/api/v1/cases/:id/parties",auth,async(req:Req,res:express.Response)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getParties(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les parties");}});
 router.post("/api/v1/cases/:id/parties",auth,permission("case:document"),async(req:Req,res:express.Response)=>{if(!req.body?.type||!req.body?.fullName)return res.status(400).json({error:"type et fullName sont obligatoires"});try{res.status(201).json({data:await addParty({caseId:req.params.id,type:req.body.type,fullName:req.body.fullName,contact:req.body.contact})});}catch(e){handleError(res,e,"Impossible d'ajouter la partie");}});
+router.get("/api/v1/cases/:id/documents/:documentId/download",auth,async(req:Req,res:express.Response)=>{
+  try{
+    const d=await findDocumentById(req.params.documentId);
+    if(!d||d.case_id!==req.params.id)return res.status(404).json({error:"Document introuvable"});
+    const a=await caseAccess(req,d.case_id);
+    if(!a)return res.status(403).json({error:"Accès refusé"});
+    const buffer=await readDocument(d.storage_key);
+    res.setHeader("Content-Type",d.mime_type||"application/octet-stream");
+    res.setHeader("Content-Disposition",`attachment; filename="${encodeURIComponent(d.filename)}"`);
+    res.send(buffer);
+  }catch(e){handleError(res,e,"Impossible de télécharger le document");}
+});
+
 router.get("/api/v1/cases/:id/documents",auth,async(req:Req,res:express.Response)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getDocuments(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les pièces");}});
 router.post("/api/v1/cases/:id/documents/upload",auth,upload.single("file"),async(req:Req,res:express.Response)=>{if(!req.user||(!hasPermission(req.user.role,"case:document")&&!(req.user.role==="CITOYEN"&&await caseAccess(req,req.params.id))))return res.status(403).json({error:"Permission refusée"});if(!req.file)return res.status(400).json({error:"Fichier obligatoire"});try{const key=await saveDocument(req.file.buffer,req.file.originalname);const d=await registerDocument({caseId:req.params.id,uploadedBy:req.user!.id,filename:req.file.originalname,storageKey:key,mimeType:req.file.mimetype,fileSize:req.file.size});const o=await extractText(req.file.buffer,"fra");if(o.status==="COMPLETED")await updateOCRText(d.id,o.text);res.status(201).json({data:{...d,ocr_text:o.text},ocr:{status:o.status,language:o.language}});}catch(e){handleError(res,e,"Impossible de stocker le document");}});
 router.post("/api/v1/documents/:documentId/ocr",auth,permission("case:document"),async(req:Req,res:express.Response)=>{try{const d=await findDocumentById(req.params.documentId);if(!d)return res.status(404).json({error:"Document introuvable"});const a=await caseAccess(req,d.case_id);if(!a)return res.status(403).json({error:"Accès refusé"});const o=await extractText(await readDocument(d.storage_key),"fra");if(o.status==="COMPLETED")await updateOCRText(d.id,o.text);res.json({data:{documentId:d.id,status:o.status,text:o.text,language:o.language}});}catch(e){handleError(res,e,"Échec du traitement OCR");}});
@@ -63,6 +77,9 @@ router.post("/api/v1/notifications",auth,permission("notification:manage"),async
 router.get("/api/v1/cases/:id/audit",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await listAudit(req.params.id)});}catch(e){handleError(res,e,"Journal d'audit indisponible");}});
 router.get("/api/v1/cases/:id/decisions",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await getDecisions(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les décisions");}});
 router.post("/api/v1/cases/:id/decisions",auth,permission("decision:create"),async(req:Req,res:express.Response)=>{if(!req.body?.content)return res.status(400).json({error:"content est obligatoire"});try{const d=await issueDecision({caseId:req.params.id,reference:req.body.reference,content:req.body.content});await writeAudit({actorId:req.user!.id,caseId:req.params.id,action:"DECISION_CREATED",metadata:{decisionId:d.id}});res.status(201).json({data:d});}catch(e){handleError(res,e,"Impossible d'enregistrer la décision");}});
+router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
+  try{res.json({data:await listUsers()});}catch(e){handleError(res,e,"Impossible de récupérer les utilisateurs");}
+});
 router.get("/api/v1/search/documents",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await searchInDocuments(String(req.query.q??""))});}catch(e){handleError(res,e,"Recherche impossible");}});
 
 app.listen(port,()=>console.log(`e-Travail API listening on :${port}`));
