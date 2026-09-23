@@ -21,6 +21,15 @@ async function seedUser(email:string,password:string,role:"ADMIN"|"CITOYEN",full
 }
 
 
+
+async function backfillCaseRequirements(){
+  await pool.query(`INSERT INTO case_requirements(case_id,requirement_id)
+    SELECT c.id,wr.id FROM cases c JOIN workflow_requirements wr ON wr.status='SOUMIS' AND wr.active=true
+      AND (wr.nature_code=c.nature_code OR wr.nature_code IS NULL)
+    WHERE NOT EXISTS (SELECT 1 FROM case_requirements cr WHERE cr.case_id=c.id)
+    ON CONFLICT(case_id,requirement_id) DO NOTHING`);
+}
+
 async function seedWorkflowRequirements(){
   const defaults=[
     ["IDENTITE","Pièce d'identité du demandeur",true,48,10],
@@ -61,6 +70,7 @@ export async function migrateDatabase(){
   if(adminEmail&&adminPassword) await seedUser(adminEmail,adminPassword,"ADMIN","Administrateur e-Travail");
   if(userEmail&&userPassword) await seedUser(userEmail,userPassword,"CITOYEN","Utilisateur test e-Travail");
   await seedWorkflowRequirements();
+  await backfillCaseRequirements();
   await seedLegalCorpus();
   await seedLabourAmendment2021();
 }
