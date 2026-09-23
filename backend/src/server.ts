@@ -1,226 +1,65 @@
-imp
-
-app.post("/api/v1/documents/:documentId/ocr", auth, permission("case:document"), async (req: AuthedRequest, res) => {
-  try {
-    const documents=await getDocuments(req.body?.caseId);
-    const document=documents.find((d:any)=>d.id===req.params.documentId);
-    if (!document) return res.status(404).json({error:"Document introuvable"});
-    const buffer=await readDocument(document.storage_key);
-    const ocr=await extractText(buffer,"fra");
-    if (ocr.status==="COMPLETED") await updateOCRText(document.id,ocr.text);
-    res.json({data:{documentId:document.id,status:ocr.status,text:ocr.text,language:ocr.language}});
-  } catch {
-    res.status(500).json({error:"Échec du traitement OCR"});
-  }
-});ort express from "express";
+import express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
-import { checkDatabase } from "./db.js";
-import { registerCitizen, authenticate } from "./services/userService.js";
-import { getParties, addParty } from "./services/partyService.js";
-import { getDocuments, registerDocument } from "./services/documentService.js";
-import { getHearings, scheduleHearing } from "./services/hearingService.js";
-import { getNotifications, notify } from "./services/notificationService.js";
-import { saveDocument, readDocument } from "./storage/localStorage.js";
-import { extractText } from "./services/ocrService.js";
-import { updateOCRText } from "./repositories/documentRepository.js";
-import { searchInDocuments } from "./services/searchService.js";
-import { getDashboard } from "./services/dashboardService.js";
-import { getDecisions, issueDecision } from "./services/decisionService.js";
 import multer from "multer";
-import { getCases, openCase, transitionCase } from "./services/caseService.js";
-import type { CaseStatus } from "./domain/workflow.js";
+import {checkDatabase} from "./db.js";
+import {registerCitizen,authenticate} from "./services/userService.js";
+import {getCases,openCase,transitionCase} from "./services/caseService.js";
+import {findCase} from "./repositories/caseRepository.js";
+import {getParties,addParty} from "./services/partyService.js";
+import {getDocuments,registerDocument} from "./services/documentService.js";
+import {findDocumentById,updateOCRText} from "./repositories/documentRepository.js";
+import {getHearings,scheduleHearing} from "./services/hearingService.js";
+import {getConciliations,scheduleConciliation,updateConciliation} from "./services/conciliationService.js";
+import {listCalendar} from "./repositories/calendarRepository.js";
+import {getNotifications,notify} from "./services/notificationService.js";
+import {saveDocument,readDocument} from "./storage/localStorage.js";
+import {extractText} from "./services/ocrService.js";
+import {searchInDocuments} from "./services/searchService.js";
+import {getDashboard} from "./services/dashboardService.js";
+import {getDecisions,issueDecision} from "./services/decisionService.js";
+import {listAudit,writeAudit} from "./repositories/auditRepository.js";
+import {hasPermission,type Role} from "./auth/permissions.js";
+import type {CaseStatus} from "./domain/workflow.js";
 
-const app = express();
-const port = Number(process.env.APP_PORT ?? 3000);
-const jwtSecret = process.env.JWT_SECRET ?? "development-only-change-me";
+const app=express(), port=Number(process.env.APP_PORT??3000), jwtSecret=process.env.JWT_SECRET??"development-only-change-me";
+app.use(cors({origin:process.env.CORS_ORIGIN?.split(",")??true}));
+app.use(express.json({limit:"2mb"}));
+const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:20*1024*1024}});
+type User={id:string;email:string;role:Role;};
+type Req=express.Request&{user?:User};
 
-app.use(cors());
-app.use(express.json({ limit: "2mb" }));
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+function auth(req:Req,res:express.Response,next:express.NextFunction){const h=req.headers.authorization;if(!h?.startsWith("Bearer "))return res.status(401).json({error:"Authentification requise"});try{req.user=jwt.verify(h.slice(7),jwtSecret) as User;next();}catch{return res.status(401).json({error:"Jeton invalide"});}}
+function permission(p:string){return (req:Req,res:express.Response,next:express.NextFunction)=>req.user&&hasPermission(req.user.role,p)?next():res.status(403).json({error:"Permission refusée"});}
+async function caseAccess(req:Req,id:string,write=false){const c=await findCase(id);if(!c)return null;if(req.user?.role==="CITOYEN"&&c.claimant_id!==req.user.id)return false;if(write&&!req.user?.role)return false;return c;}
+function handleError(res:express.Response,e:unknown,fallback:string){const code=e instanceof Error?e.message:"";const map:Record<string,[number,string]>={INVALID_DATE:[400,"Date invalide"],DATE_IN_PAST:[400,"La date doit être future"],INVALID_STATUS:[400,"Statut invalide"],INVALID_CHANNEL:[400,"Canal invalide"],QUERY_TOO_SHORT:[400,"La recherche doit contenir au moins 2 caractères"],FILE_TYPE_NOT_ALLOWED:[415,"Type de fichier non autorisé"],FILE_TOO_LARGE:[413,"Fichier trop volumineux"],CASE_NOT_FOUND:[404,"Dossier introuvable"],INVALID_TRANSITION:[422,"Transition interdite"],DECISION_TOO_SHORT:[400,"Décision trop courte"]};const x=map[code];return x?res.status(x[0]).json({error:x[1]}):res.status(500).json({error:fallback});}
 
-type Role = "CITOYEN" | "GREFFE" | "MAGISTRAT" | "ADMIN";
-interface User { id: string; email: string; role: Role; }
+app.get("/api/v1/health",async(_req,res)=>{let database=false;try{database=await checkDatabase();}catch{}res.status(database?200:503).json({service:"etravail-api",status:database?"ok":"degraded",database,version:"0.3.0"});});
+app.post("/api/v1/auth/register",async(req,res)=>{if(!req.body?.email||!req.body?.password)return res.status(400).json({error:"email et password sont obligatoires"});try{const u=await registerCitizen(req.body);res.status(201).json({data:{id:u.id,email:u.email,role:u.role,fullName:u.full_name}});}catch(e){const c=e instanceof Error?e.message:"";return res.status(c==="EMAIL_EXISTS"?409:400).json({error:c==="EMAIL_EXISTS"?"Email déjà utilisé":c==="PASSWORD_TOO_SHORT"?"Mot de passe trop court":"Inscription impossible"});}});
+app.post("/api/v1/auth/login",async(req,res)=>{if(!req.body?.email||!req.body?.password)return res.status(400).json({error:"email et password sont obligatoires"});try{const u=await authenticate(req.body.email,req.body.password);const token=jwt.sign({id:u.id,email:u.email,role:u.role},jwtSecret,{expiresIn:"8h"});res.json({token,user:{id:u.id,email:u.email,role:u.role,fullName:u.full_name}});}catch{res.status(401).json({error:"Identifiants invalides"});}});
 
-const users: User[] = [
-  { id: "u-admin", email: "admin@etravail.local", role: "ADMIN" },
-  { id: "u-greffe", email: "greffe@etravail.local", role: "GREFFE" },
-  { id: "u-magistrat", email: "magistrat@etravail.local", role: "MAGISTRAT" }
-];
+app.get("/api/v1/dashboard",auth,async(req:Req,res)=>{try{res.json({data:await getDashboard(req.user!.role,req.user!.id)});}catch(e){handleError(res,e,"Tableau de bord indisponible");}});
+app.get("/api/v1/cases",auth,async(req:Req,res)=>{if(!req.user)return res.status(401).end();if(req.user.role==="CITOYEN")return res.json({data:(await getCases()).filter(c=>c.claimant_id===req.user!.id)});if(!hasPermission(req.user.role,"case:read"))return res.status(403).json({error:"Permission refusée"});try{res.json({data:await getCases()});}catch(e){handleError(res,e,"Impossible de récupérer les dossiers");}});
+app.post("/api/v1/cases",auth,permission("case:create"),async(req:Req,res)=>{if(!req.body?.title)return res.status(400).json({error:"title est obligatoire"});try{res.status(201).json({data:await openCase({claimantId:req.user!.id,actorId:req.user!.id,title:String(req.body.title).trim()})});}catch(e){handleError(res,e,"Impossible de créer le dossier");}});
+app.post("/api/v1/cases/:id/transition",auth,permission("case:transition"),async(req:Req,res)=>{try{const item=await transitionCase({id:req.params.id,next:req.body?.status as CaseStatus,actorId:req.user!.id});const c=await findCase(req.params.id);if(c)await notify({userId:c.claimant_id,caseId:c.id,channel:"IN_APP",subject:"Mise à jour du dossier",body:`Le dossier ${c.reference} est maintenant au statut ${item?.status}.`});res.json({data:item});}catch(e){handleError(res,e,"Impossible de modifier le dossier");}});
+app.get("/api/v1/cases/:id/parties",auth,async(req:Req,res)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getParties(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les parties");}});
+app.post("/api/v1/cases/:id/parties",auth,permission("case:document"),async(req,res)=>{if(!req.body?.type||!req.body?.fullName)return res.status(400).json({error:"type et fullName sont obligatoires"});try{res.status(201).json({data:await addParty({caseId:req.params.id,type:req.body.type,fullName:req.body.fullName,contact:req.body.contact})});}catch(e){handleError(res,e,"Impossible d'ajouter la partie");}});
+app.get("/api/v1/cases/:id/documents",auth,async(req:Req,res)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getDocuments(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les pièces");}});
+app.post("/api/v1/cases/:id/documents/upload",auth,permission("case:document"),upload.single("file"),async(req:Req,res)=>{if(!req.file)return res.status(400).json({error:"Fichier obligatoire"});try{const key=await saveDocument(req.file.buffer,req.file.originalname);const d=await registerDocument({caseId:req.params.id,uploadedBy:req.user!.id,filename:req.file.originalname,storageKey:key,mimeType:req.file.mimetype,fileSize:req.file.size});const o=await extractText(req.file.buffer,"fra");if(o.status==="COMPLETED")await updateOCRText(d.id,o.text);res.status(201).json({data:{...d,ocr_text:o.text},ocr:{status:o.status,language:o.language}});}catch(e){handleError(res,e,"Impossible de stocker le document");}});
+app.post("/api/v1/documents/:documentId/ocr",auth,permission("case:document"),async(req:Req,res)=>{try{const d=await findDocumentById(req.params.documentId);if(!d)return res.status(404).json({error:"Document introuvable"});const a=await caseAccess(req,d.case_id);if(!a)return res.status(403).json({error:"Accès refusé"});const o=await extractText(await readDocument(d.storage_key),"fra");if(o.status==="COMPLETED")await updateOCRText(d.id,o.text);res.json({data:{documentId:d.id,status:o.status,text:o.text,language:o.language}});}catch(e){handleError(res,e,"Échec du traitement OCR");}});
 
-const permissions: Record<Role, string[]> = {
-  CITOYEN: ["case:create", "case:read:own"],
-  GREFFE: ["case:read", "case:transition", "case:document"],
-  MAGISTRAT: ["case:read", "case:transition", "decision:create"],
-  ADMIN: ["case:read", "case:transition", "case:document", "decision:create", "admin:manage"]
-};
+app.get("/api/v1/cases/:id/hearings",auth,async(req:Req,res)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getHearings(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les audiences");}});
+app.post("/api/v1/cases/:id/hearings",auth,permission("hearing:manage"),async(req:Req,res)=>{try{const h=await scheduleHearing({caseId:req.params.id,scheduledAt:req.body?.scheduledAt,room:req.body?.room});const c=await findCase(req.params.id);if(c)await notify({userId:c.claimant_id,caseId:c.id,channel:"IN_APP",subject:"Audience programmée",body:`Une audience a été programmée pour le dossier ${c.reference} le ${new Date(h.scheduled_at).toLocaleString("fr-FR")}.`});res.status(201).json({data:h});}catch(e){handleError(res,e,"Impossible de programmer l'audience");}});
+app.get("/api/v1/cases/:id/conciliations",auth,async(req:Req,res)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getConciliations(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les conciliations");}});
+app.post("/api/v1/cases/:id/conciliations",auth,permission("hearing:manage"),async(req:Req,res)=>{try{const x=await scheduleConciliation({caseId:req.params.id,scheduledAt:req.body?.scheduledAt,room:req.body?.room,createdBy:req.user!.id,notes:req.body?.notes});const c=await findCase(req.params.id);if(c)await notify({userId:c.claimant_id,caseId:c.id,channel:"IN_APP",subject:"Conciliation programmée",body:`Une conciliation a été programmée pour le dossier ${c.reference} le ${new Date(x.scheduled_at).toLocaleString("fr-FR")}.`});res.status(201).json({data:x});}catch(e){handleError(res,e,"Impossible de programmer la conciliation");}});
+app.patch("/api/v1/conciliations/:id",auth,permission("hearing:manage"),async(req,res)=>{try{res.json({data:await updateConciliation(req.params.id,req.body?.status,req.body?.notes)});}catch(e){handleError(res,e,"Impossible de modifier la conciliation");}});
+app.get("/api/v1/calendar",auth,async(req:Req,res)=>{try{res.json({data:await listCalendar(req.query.caseId?String(req.query.caseId):undefined)});}catch(e){handleError(res,e,"Calendrier indisponible");}});
 
-type AuthedRequest = express.Request & { user?: User };
+app.get("/api/v1/notifications",auth,async(req:Req,res)=>{try{res.json({data:await getNotifications(req.user!.id)});}catch(e){handleError(res,e,"Impossible de récupérer les notifications");}});
+app.post("/api/v1/notifications",auth,permission("notification:manage"),async(req,res)=>{if(!req.body?.userId||!req.body?.subject||!req.body?.body)return res.status(400).json({error:"userId, subject et body sont obligatoires"});try{res.status(201).json({data:await notify({userId:req.body.userId,caseId:req.body.caseId,channel:req.body.channel??"IN_APP",subject:req.body.subject,body:req.body.body})});}catch(e){handleError(res,e,"Impossible de créer la notification");}});
+app.get("/api/v1/cases/:id/audit",auth,permission("case:read"),async(req,res)=>{try{res.json({data:await listAudit(req.params.id)});}catch(e){handleError(res,e,"Journal d'audit indisponible");}});
+app.get("/api/v1/cases/:id/decisions",auth,permission("case:read"),async(req,res)=>{try{res.json({data:await getDecisions(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les décisions");}});
+app.post("/api/v1/cases/:id/decisions",auth,permission("decision:create"),async(req:Req,res)=>{if(!req.body?.content)return res.status(400).json({error:"content est obligatoire"});try{const d=await issueDecision({caseId:req.params.id,reference:req.body.reference,content:req.body.content});await writeAudit({actorId:req.user!.id,caseId:req.params.id,action:"DECISION_CREATED",metadata:{decisionId:d.id}});res.status(201).json({data:d});}catch(e){handleError(res,e,"Impossible d'enregistrer la décision");}});
+app.get("/api/v1/search/documents",auth,permission("case:read"),async(req,res)=>{try{res.json({data:await searchInDocuments(String(req.query.q??""))});}catch(e){handleError(res,e,"Recherche impossible");}});
 
-function auth(req: AuthedRequest, res: express.Response, next: express.NextFunction) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) return res.status(401).json({ error: "Authentification requise" });
-  try {
-    req.user = jwt.verify(header.slice(7), jwtSecret) as User;
-    next();
-  } catch {
-    res.status(401).json({ error: "Jeton invalide" });
-  }
-}
-
-function permission(required: string) {
-  return (req: AuthedRequest, res: express.Response, next: express.NextFunction) => {
-    if (!req.user || !permissions[req.user.role].includes(required)) {
-      return res.status(403).json({ error: "Permission refusée" });
-    }
-    next();
-  };
-}
-
-app.get("/api/v1/health", async (_req, res) => {
-  let database = false;
-  try { database = await checkDatabase(); } catch { database = false; }
-  res.status(database ? 200 : 503).json({
-    service: "etravail-api",
-    status: database ? "ok" : "degraded",
-    database,
-    version: "0.2.0"
-  });
-});
-
-app.post("/api/v1/auth/register", async (req, res) => {\n  if (!req.body?.email || !req.body?.password) return res.status(400).json({ error: "email et password sont obligatoires" });\n  try { const user = await registerCitizen(req.body); res.status(201).json({ data: { id:user.id,email:user.email,role:user.role,fullName:user.full_name } }); }\n  catch (error) { const code=error instanceof Error?error.message:"UNKNOWN"; if(code==="EMAIL_EXISTS") return res.status(409).json({error:"Email déjà utilisé"}); if(code==="PASSWORD_TOO_SHORT") return res.status(400).json({error:"Mot de passe trop court"}); res.status(500).json({error:"Inscription impossible"}); }\n});\n\napp.post("/api/v1/auth/login", async (req, res) => {\n  if (!req.body?.email || !req.body?.password) return res.status(400).json({ error: "email et password sont obligatoires" });\n  try { const user = await authenticate(req.body.email, req.body.password); const token=jwt.sign({id:user.id,email:user.email,role:user.role},jwtSecret,{expiresIn:"8h"}); res.json({token,user:{id:user.id,email:user.email,role:user.role,fullName:user.full_name}}); }\n  catch { res.status(401).json({error:"Identifiants invalides"}); }\n});\n\n// Développement uniquement. À supprimer avant production.
-app.post("/api/v1/auth/dev-login", (req, res) => {
-  const user = users.find(u => u.email === req.body?.email);
-  if (!user) return res.status(401).json({ error: "Utilisateur de développement inconnu" });
-  const token = jwt.sign(user, jwtSecret, { expiresIn: "8h" });
-  res.json({ token, user });
-});
-
-app.get("/api/v1/dashboard", auth, async (req: AuthedRequest, res) => {
-  try { res.json({data:await getDashboard(req.user!.role,req.user!.id)}); }
-  catch { res.status(500).json({error:"Tableau de bord indisponible"}); }
-});
-
-app.get("/api/v1/cases/:id/decisions", auth, permission("case:read"), async (req,res)=>{
-  try { res.json({data:await getDecisions(req.params.id)}); }
-  catch { res.status(500).json({error:"Impossible de récupérer les décisions"}); }
-});
-
-app.post("/api/v1/cases/:id/decisions", auth, permission("decision:create"), async (req,res)=>{
-  if(!req.body?.content) return res.status(400).json({error:"content est obligatoire"});
-  try { res.status(201).json({data:await issueDecision({caseId:req.params.id,reference:req.body.reference,content:req.body.content})}); }
-  catch(error) { if(error instanceof Error && error.message==="DECISION_TOO_SHORT") return res.status(400).json({error:"Décision trop courte"}); res.status(500).json({error:"Impossible d'enregistrer la décision"}); }
-});
-
-app.get("/api/v1/search/documents", auth, permission("case:read"), async (req, res) => {
-  const q=String(req.query.q ?? "");
-  try { res.json({data:await searchInDocuments(q)}); }
-  catch(error) { if(error instanceof Error && error.message==="QUERY_TOO_SHORT") return res.status(400).json({error:"La recherche doit contenir au moins 2 caractères"}); res.status(500).json({error:"Recherche impossible"}); }
-});
-
-app.get("/api/v1/cases", auth, permission("case:read"), async (_req, res) => {
-  try {
-    res.json({ data: await getCases() });
-  } catch {
-    res.status(500).json({ error: "Impossible de récupérer les dossiers" });
-  }
-});
-
-app.post("/api/v1/cases", auth, permission("case:create"), async (req: AuthedRequest, res) => {
-  if (!req.body?.title || typeof req.body.title !== "string") {
-    return res.status(400).json({ error: "title est obligatoire" });
-  }
-  try {
-    const item = await openCase({
-      claimantId: req.user!.id,
-      actorId: req.user!.id,
-      title: req.body.title.trim()
-    });
-    res.status(201).json({ data: item });
-  } catch {
-    res.status(500).json({ error: "Impossible de créer le dossier" });
-  }
-});
-
-
-app.get("/api/v1/cases/:id/parties", auth, permission("case:read"), async (req, res) => {
-  try { res.json({ data: await getParties(req.params.id) }); }
-  catch { res.status(500).json({ error: "Impossible de récupérer les parties" }); }
-});
-
-app.post("/api/v1/cases/:id/parties", auth, permission("case:document"), async (req: AuthedRequest, res) => {
-  if (!req.body?.type || !req.body?.fullName) return res.status(400).json({ error: "type et fullName sont obligatoires" });
-  try { res.status(201).json({ data: await addParty({ caseId:req.params.id,type:req.body.type,fullName:req.body.fullName,contact:req.body.contact }) }); }
-  catch { res.status(500).json({ error: "Impossible d'ajouter la partie" }); }
-});
-
-app.get("/api/v1/cases/:id/documents", auth, permission("case:read"), async (req, res) => {
-  try { res.json({ data: await getDocuments(req.params.id) }); }
-  catch { res.status(500).json({ error: "Impossible de récupérer les pièces" }); }
-});
-
-app.post("/api/v1/cases/:id/documents", auth, permission("case:document"), async (req: AuthedRequest, res) => {
-  if (!req.body?.filename || !req.body?.storageKey) return res.status(400).json({ error: "filename et storageKey sont obligatoires" });
-  try {
-    const data=await registerDocument({caseId:req.params.id,uploadedBy:req.user!.id,filename:req.body.filename,storageKey:req.body.storageKey,mimeType:req.body.mimeType,fileSize:req.body.fileSize});
-    res.status(201).json({data});
-  } catch(error) {
-    const code=error instanceof Error?error.message:"UNKNOWN";
-    if(code==="FILE_TYPE_NOT_ALLOWED") return res.status(415).json({error:"Type de fichier non autorisé"});
-    if(code==="FILE_TOO_LARGE") return res.status(413).json({error:"Fichier trop volumineux"});
-    res.status(500).json({error:"Impossible d'enregistrer la pièce"});
-  }
-});
-
-
-app.get("/api/v1/cases/:id/hearings", auth, permission("case:read"), async (req, res) => {
-  try { res.json({ data: await getHearings(req.params.id) }); }
-  catch { res.status(500).json({ error: "Impossible de récupérer les audiences" }); }
-});
-
-app.post("/api/v1/cases/:id/hearings", auth, permission("case:transition"), async (req, res) => {
-  if (!req.body?.scheduledAt) return res.status(400).json({ error: "scheduledAt est obligatoire" });
-  try { res.status(201).json({ data: await scheduleHearing({ caseId:req.params.id, scheduledAt:req.body.scheduledAt, room:req.body.room }) }); }
-  catch(error) { const code=error instanceof Error?error.message:"UNKNOWN"; if(code==="INVALID_DATE"||code==="DATE_IN_PAST") return res.status(400).json({error:"Date d'audience invalide"}); res.status(500).json({error:"Impossible de programmer l'audience"}); }
-});
-
-app.get("/api/v1/notifications", auth, async (req: AuthedRequest, res) => {
-  try { res.json({ data: await getNotifications(req.user!.id) }); }
-  catch { res.status(500).json({ error: "Impossible de récupérer les notifications" }); }
-});
-
-app.post("/api/v1/notifications", auth, permission("case:transition"), async (req, res) => {
-  if (!req.body?.userId || !req.body?.subject || !req.body?.body) return res.status(400).json({error:"userId, subject et body sont obligatoires"});
-  try { res.status(201).json({data:await notify({userId:req.body.userId,caseId:req.body.caseId,channel:req.body.channel??"IN_APP",subject:req.body.subject,body:req.body.body})}); }
-  catch(error) { if(error instanceof Error && error.message==="INVALID_CHANNEL") return res.status(400).json({error:"Canal invalide"}); res.status(500).json({error:"Impossible de créer la notification"}); }
-});
-
-app.post("/api/v1/cases/:id/documents/upload", auth, permission("case:document"), upload.single("file"), async (req: AuthedRequest, res) => {
-  if (!req.file) return res.status(400).json({error:"Fichier obligatoire"});
-  const allowed=["application/pdf","image/jpeg","image/png"];
-  if (!allowed.includes(req.file.mimetype)) return res.status(415).json({error:"Type de fichier non autorisé"});
-  try {
-    const storageKey=await saveDocument(req.file.buffer,req.file.originalname);
-    const data=await registerDocument({caseId:req.params.id,uploadedBy:req.user!.id,filename:req.file.originalname,storageKey,mimeType:req.file.mimetype,fileSize:req.file.size});
-    const ocr=await extractText(req.file.buffer,"fra");
-    if (ocr.status === "COMPLETED") await updateOCRText(data.id,ocr.text);
-    const finalData={...data,ocr_text:ocr.text};
-    res.status(201).json({data:finalData,ocr:{status:ocr.status,language:ocr.language}});
-  } catch { res.status(500).json({error:"Impossible de stocker le document"}); }
-});
-
-app.post("/api/v1/cases/:id/transition", auth, permission("case:transition"), async (req: AuthedRequest, res) => {
-  const next = req.body?.status as CaseStatus;
-  if (!next) return res.status(400).json({ error: "status est obligatoire" });
-  try {
-    const item = await transitionCase({ id: req.params.id, next, actorId: req.user!.id });
-    res.json({ data: item });
-  } catch (error) {
-    const code = error instanceof Error ? error.message : "UNKNOWN";
-    if (code === "CASE_NOT_FOUND") return res.status(404).json({ error: "Dossier introuvable" });
-    if (code === "INVALID_TRANSITION") return res.status(422).json({ error: "Transition interdite" });
-    res.status(500).json({ error: "Impossible de modifier le dossier" });
-  }
-});
-
-app.listen(port, () => console.log(`e-Travail API listening on :${port}`));
+app.listen(port,()=>console.log(`e-Travail API listening on :${port}`));
