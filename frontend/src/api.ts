@@ -24,3 +24,4 @@ export async function getUsers(){return api("/admin/users");}
 export async function updateUserAccess(id:string,data:{role:string;active:boolean}){return api(`/admin/users/${id}`,{method:"PATCH",body:JSON.stringify(data)});}
 export async function searchLegalSources(q:string){return api(`/legal/sources?q=${encodeURIComponent(q)}`);}
 export async function legalAssist(question:string,caseId?:string){return api("/ai/assist",{method:"POST",body:JSON.stringify({question,caseId})});}
+\nexport async function downloadDocument(caseId:string,documentId:string){const token=localStorage.getItem("etravail_token");const r=await fetch(`${API_URL}/cases/${caseId}/documents/${documentId}/download`,{headers:token?{Authorization:`Bearer ${token}`}:{}});if(!r.ok){const d=await r.json().catch(()=>({}));throw new Error(d.error??"Téléchargement impossible");}return r.blob();}\n
