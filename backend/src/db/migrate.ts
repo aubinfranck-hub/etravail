@@ -37,7 +37,7 @@ export async function migrateDatabase(){
 
 
 const LEGAL_CORPUS_URL = "https://agp.africanlii.org/fr/akn/ci/act/2015/532/fra@2023-08-10";
-const LEGAL_OFFICIAL_REFERENCE_URL = "https://cepici.ci/autre-code";
+const LEGAL_OFFICIAL_REFERENCE_URL = "https://www.famille.gouv.ci/public/front/docs/RCI-Code-2015-travail.pdf";
 
 function decodeHtml(value:string){
   return value.replace(/&nbsp;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&lt;/gi,"<").replace(/&gt;/gi,">").replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi,(_,n)=>String.fromCodePoint(parseInt(n,16)));
@@ -70,7 +70,7 @@ export function parseLegalArticles(html:string){
 }
 
 async function seedLegalCorpus(){
-  const existing=await pool.query("SELECT COUNT(*)::int AS count FROM legal_sources WHERE source_type=$1 AND version_label=$2",["CODE_DU_TRAVAIL","2022"]);
+  const existing=await pool.query("SELECT COUNT(*)::int AS count FROM legal_sources WHERE source_type=$1 AND version_label=$2",["CODE_DU_TRAVAIL","2023"]);
   if(Number(existing.rows[0]?.count??0)>0){ console.log("Legal corpus already seeded; skipping"); return; }
   const response=await fetch(LEGAL_CORPUS_URL,{signal:AbortSignal.timeout(30000)});
   if(!response.ok) throw new Error("LEGAL_CORPUS_FETCH_FAILED");
@@ -86,7 +86,7 @@ async function seedLegalCorpus(){
       const content="Article "+article.number+". "+article.content;
       const hash=crypto.createHash("sha256").update(content).digest("hex");
       await client.query(
-        "INSERT INTO legal_sources(title,jurisdiction,source_type,official_url,version_label,published_at,content,content_hash,active) SELECT $1,'COTE_D_IVOIRE','CODE_DU_TRAVAIL',$2,'2022','2015-07-20',$3,$4,TRUE WHERE NOT EXISTS (SELECT 1 FROM legal_sources WHERE source_type='CODE_DU_TRAVAIL' AND content_hash=$4)",
+        "INSERT INTO legal_sources(title,jurisdiction,source_type,official_url,version_label,published_at,content,content_hash,active) SELECT $1,'COTE_D_IVOIRE','CODE_DU_TRAVAIL',$2,'2023','2015-07-20',$3,$4,TRUE WHERE NOT EXISTS (SELECT 1 FROM legal_sources WHERE source_type='CODE_DU_TRAVAIL' AND content_hash=$4)",
         ["Code du travail ivoirien — Article "+article.number,LEGAL_OFFICIAL_REFERENCE_URL,content,hash]
       );
     }
