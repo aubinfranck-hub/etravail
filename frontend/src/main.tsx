@@ -1,6 +1,6 @@
 import React,{useEffect,useMemo,useState} from "react";
 import {createRoot} from "react-dom/client";
-import {getDashboard,getCases,getCalendar,getNotifications,login,searchDocuments,createCase,uploadDocument,transitionCase,getCaseParties,addParty,getCaseDocuments,getHearings,createHearing,getConciliations,createConciliation,updateConciliation,getDecisions,createDecision,getAudit,getUsers} from "./api";
+import {getDashboard,getCases,getCalendar,getNotifications,login,searchDocuments,createCase,uploadDocument,transitionCase,getCaseParties,addParty,getCaseDocuments,getHearings,createHearing,getConciliations,createConciliation,updateConciliation,getDecisions,createDecision,getAudit,getUsers,updateUserAccess} from "./api";
 import "./styles.css";
 
 type Case={id:string;reference:string;title:string;status:string;claimant_id?:string};
@@ -48,7 +48,7 @@ function App(){const[ready,setReady]=useState(!!localStorage.getItem("etravail_t
  <div className="grid">{cases.map(c=><article key={c.id} className="caseCard" onClick={()=>setSelected(c)}><small>{c.reference}</small><h3>{c.title}</h3><p className="status">{c.status.replaceAll("_"," ")}</p>{user.role==="CITOYEN"&&c.status==="BROUILLON"&&<button disabled={busy} onClick={e=>{e.stopPropagation();submit(c)}}>Soumettre</button>}</article>)}</div>
  <section><h2>Calendrier opérationnel</h2><div className="grid">{calendar.slice(0,8).map(x=><article key={x.type+x.id}><small>{x.type}</small><h3>{new Date(x.scheduled_at).toLocaleString("fr-FR")}</h3><p>{x.room||"Salle non renseignée"} · {x.status}</p></article>)}</div></section>
  <section><h2>Notifications</h2><div className="results">{notifications.slice(0,8).map(n=><article key={n.id}><b>{n.subject}</b><p>{n.body}</p></article>)}</div></section>
- {user.role==="ADMIN"&&<section><h2>Administration — utilisateurs</h2><div className="grid">{users.map(u=><article key={u.id}><b>{u.full_name||u.email}</b><p>{u.email}</p><span className="pill">{u.role}</span><small>{u.active?"Actif":"Inactif"}</small></article>)}</div></section>}
+ {user.role==="ADMIN"&&<section><h2>Administration — utilisateurs</h2><div className="grid">{users.map(u=><article key={u.id}><b>{u.full_name||u.email}</b><p>{u.email}</p><div className="buttonRow"><select defaultValue={u.role} onChange={async e=>{try{await updateUserAccess(u.id,{role:e.target.value,active:u.active});setUsers(x=>x.map(z=>z.id===u.id?{...z,role:e.target.value}:z))}catch(e:any){setError(e.message)}}}><option>CITOYEN</option><option>GREFFE</option><option>MAGISTRAT</option><option>ADMIN</option></select><button onClick={async()=>{try{const active=!u.active;await updateUserAccess(u.id,{role:u.role,active});setUsers(x=>x.map(z=>z.id===u.id?{...z,active}:z))}catch(e:any){setError(e.message)}}}>{u.active?"Désactiver":"Activer"}</button></div><span className="pill">{u.role}</span><small>{u.active?"Actif":"Inactif"}</small></article>)}</div></section>}
  </>}
  <footer>e-Travail — plateforme numérique de gestion et de suivi. Elle ne constitue pas un tribunal.</footer></main>}
 createRoot(document.getElementById("root")!).render(<React.StrictMode><App/></React.StrictMode>);
