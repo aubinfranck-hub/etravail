@@ -43,7 +43,7 @@ export async function assistLegal(input:{userId:string;question:string;caseId?:s
   const prompt=`Tu es un assistant juridique administratif pour e-Travail. Tu n'es ni juge ni avocat et tu ne rends aucune décision. Réponds uniquement à partir des sources fournies. Distingue clairement ce qui est établi de ce qui doit être vérifié. Cite les sources par [SOURCE n]. Si les sources ne permettent pas de répondre, dis-le explicitement. Question: ${question}\n\nSources:\n${context}`;
   const response=await fetch("https://api.openai.com/v1/responses",{
     method:"POST",
-    headers:{"Content-Type":"application/json","Authorization:`Bearer ${process.env.OPENAI_API_KEY}`},
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${process.env.OPENAI_API_KEY}`},
     body:JSON.stringify({model,input:prompt})
   });
   if(!response.ok)throw new Error("AI_PROVIDER_ERROR");
