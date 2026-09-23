@@ -8,6 +8,11 @@ test("workflow only permits declared transitions",()=>{
     for(const to of targets) assert.equal(canTransition(from as any,to),true);
   }
   assert.equal(canTransition("BROUILLON","DECISION_RENDUE"),false);
+  assert.equal(canTransition("COMPLET","ENROLEMENT"),true);
+  assert.equal(canTransition("ENROLEMENT","CONCILIATION"),true);
+  assert.equal(canTransition("CONCILIATION","CONCILIATION_ECHEC"),true);
+  assert.equal(canTransition("CONCILIATION_ECHEC","AUDIENCE_PLANIFIEE"),true);
+  assert.equal(canTransition("CONCILIATION","DECISION_RENDUE"),false);
   assert.equal(canTransition("ARCHIVE","BROUILLON"),false);
 });
 
