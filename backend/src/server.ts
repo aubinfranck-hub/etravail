@@ -31,6 +31,26 @@ if(isProduction&&!process.env.CORS_ORIGIN)throw new Error("CORS_ORIGIN must be s
 app.use(cors({origin:process.env.CORS_ORIGIN?.split(",")??true}));
 app.use(express.json({limit:"2mb"}));
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:20*1024*1024}});
+
+const rateBuckets=new Map<string,{count:number;resetAt:number}>();
+function rateLimit(limit:number,windowMs:number){
+  return (req:express.Request,res:express.Response,next:express.NextFunction)=>{
+    const key=req.ip??"unknown";
+    const now=Date.now();
+    const current=rateBuckets.get(key);
+    if(!current||current.resetAt<=now){
+      rateBuckets.set(key,{count:1,resetAt:now+windowMs});
+      return next();
+    }
+    current.count++;
+    if(current.count>limit){
+      res.setHeader("Retry-After",String(Math.ceil((current.resetAt-now)/1000)));
+      return res.status(429).json({error:"Trop de requêtes. Réessayez plus tard."});
+    }
+    next();
+  };
+}
+
 const router:any=app;
 type User={id:string;email:string;role:Role;};
 type Req=express.Request<Record<string,string>>&{user?:User};
@@ -41,8 +61,8 @@ async function caseAccess(req:Req,id:string,write=false){const c=await findCase(
 function handleError(res:express.Response,e:unknown,fallback:string){const code=e instanceof Error?e.message:"";const map:Record<string,[number,string]>={INVALID_SOURCE_URL:[400,"URL de source invalide"],FILE_SIGNATURE_INVALID:[415,"Contenu de fichier invalide"],INVALID_DATE:[400,"Date invalide"],DATE_IN_PAST:[400,"La date doit être future"],INVALID_STATUS:[400,"Statut invalide"],INVALID_CHANNEL:[400,"Canal invalide"],QUERY_TOO_SHORT:[400,"La recherche doit contenir au moins 2 caractères"],FILE_TYPE_NOT_ALLOWED:[415,"Type de fichier non autorisé"],FILE_TOO_LARGE:[413,"Fichier trop volumineux"],CASE_NOT_FOUND:[404,"Dossier introuvable"],INVALID_TRANSITION:[422,"Transition interdite"],DECISION_TOO_SHORT:[400,"Décision trop courte"]};const x=map[code];return x?res.status(x[0]).json({error:x[1]}):res.status(500).json({error:fallback});}
 
 router.get("/api/v1/health",async(_req:express.Request,res:express.Response)=>{let database=false;try{database=await checkDatabase();}catch{}res.status(database?200:503).json({service:"etravail-api",status:database?"ok":"degraded",database,version:"0.3.0"});});
-router.post("/api/v1/auth/register",async(req:express.Request,res:express.Response)=>{if(!req.body?.email||!req.body?.password)return res.status(400).json({error:"email et password sont obligatoires"});try{const u=await registerCitizen(req.body);res.status(201).json({data:{id:u.id,email:u.email,role:u.role,fullName:u.full_name}});}catch(e){const c=e instanceof Error?e.message:"";return res.status(c==="EMAIL_EXISTS"?409:400).json({error:c==="EMAIL_EXISTS"?"Email déjà utilisé":c==="PASSWORD_TOO_SHORT"?"Mot de passe trop court":"Inscription impossible"});}});
-router.post("/api/v1/auth/login",async(req:express.Request,res:express.Response)=>{if(!req.body?.email||!req.body?.password)return res.status(400).json({error:"email et password sont obligatoires"});try{const u=await authenticate(req.body.email,req.body.password);const token=jwt.sign({id:u.id,email:u.email,role:u.role},jwtSecret,{expiresIn:"8h"});res.json({token,user:{id:u.id,email:u.email,role:u.role,fullName:u.full_name}});}catch{res.status(401).json({error:"Identifiants invalides"});}});
+router.post("/api/v1/auth/register",rateLimit(10,15*60*1000),async(req:express.Request,res:express.Response)=>{if(!req.body?.email||!req.body?.password)return res.status(400).json({error:"email et password sont obligatoires"});try{const u=await registerCitizen(req.body);res.status(201).json({data:{id:u.id,email:u.email,role:u.role,fullName:u.full_name}});}catch(e){const c=e instanceof Error?e.message:"";return res.status(c==="EMAIL_EXISTS"?409:400).json({error:c==="EMAIL_EXISTS"?"Email déjà utilisé":c==="PASSWORD_TOO_SHORT"?"Mot de passe trop court":"Inscription impossible"});}});
+router.post("/api/v1/auth/login",rateLimit(10,15*60*1000),async(req:express.Request,res:express.Response)=>{if(!req.body?.email||!req.body?.password)return res.status(400).json({error:"email et password sont obligatoires"});try{const u=await authenticate(req.body.email,req.body.password);const token=jwt.sign({id:u.id,email:u.email,role:u.role},jwtSecret,{expiresIn:"8h"});res.json({token,user:{id:u.id,email:u.email,role:u.role,fullName:u.full_name}});}catch{res.status(401).json({error:"Identifiants invalides"});}});
 
 router.get("/api/v1/dashboard",auth,async(req:Req,res:express.Response)=>{try{res.json({data:await getDashboard(req.user!.role,req.user!.id)});}catch(e){handleError(res,e,"Tableau de bord indisponible");}});
 router.get("/api/v1/cases",auth,async(req:Req,res:express.Response)=>{if(!req.user)return res.status(401).end();if(req.user.role==="CITOYEN")return res.json({data:(await getCases()).filter(c=>c.claimant_id===req.user!.id)});if(!hasPermission(req.user.role,"case:read"))return res.status(403).json({error:"Permission refusée"});try{res.json({data:await getCases()});}catch(e){handleError(res,e,"Impossible de récupérer les dossiers");}});
@@ -96,7 +116,7 @@ router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,
 router.get("/api/v1/legal/sources",auth,permission("legal:read"),async(req:Req,res:express.Response)=>{
   try{res.json({data:await searchLegal(String(req.query.q??""))});}catch(e){handleError(res,e,"Recherche juridique impossible");}
 });
-router.post("/api/v1/ai/assist",auth,permission("legal:read"),async(req:Req,res:express.Response)=>{
+router.post("/api/v1/ai/assist",rateLimit(20,10*60*1000),auth,permission("legal:read"),async(req:Req,res:express.Response)=>{
   if(!req.body?.question)return res.status(400).json({error:"question obligatoire"});
   try{res.json({data:await assistLegal({userId:req.user!.id,caseId:req.body.caseId,question:String(req.body.question)})});}
   catch(e){handleError(res,e,"Assistance juridique indisponible");}
