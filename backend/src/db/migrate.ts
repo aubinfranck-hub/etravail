@@ -71,7 +71,7 @@ export function parseLegalArticles(html:string){
 
 async function seedLegalCorpus(){
   const existing=await pool.query("SELECT COUNT(*)::int AS count FROM legal_sources WHERE source_type=$1 AND version_label=$2",["CODE_DU_TRAVAIL","2023"]);
-  if(Number(existing.rows[0]?.count??0)>0){ console.log("Legal corpus already seeded; skipping"); return; }
+  if(Number(existing.rows[0]?.count??0)>0){ const validation=await pool.query("SELECT COUNT(*)::int AS count FROM legal_sources WHERE active=true AND to_tsvector('french',coalesce(content,'')) @@ plainto_tsquery('french',$1)",["licenciement"]); console.log("Legal corpus already seeded; search validation matches: "+validation.rows[0]?.count); return; }
   const response=await fetch(LEGAL_CORPUS_URL,{signal:AbortSignal.timeout(30000)});
   if(!response.ok) throw new Error("LEGAL_CORPUS_FETCH_FAILED");
   const pdfData=new Uint8Array(await response.arrayBuffer());
