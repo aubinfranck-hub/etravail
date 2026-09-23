@@ -38,3 +38,13 @@ export async function createUser(input: {
   );
   return result.rows[0] as UserRecord;
 }
+
+
+export async function updateUserAccess(id:string,input:{role:UserRecord["role"];active:boolean}) {
+  const result=await pool.query(
+    `UPDATE users SET role=$2, active=$3 WHERE id=$1
+     RETURNING id,email,role,full_name,phone,active,created_at`,
+    [id,input.role,input.active]
+  );
+  return result.rows[0] ?? null;
+}
