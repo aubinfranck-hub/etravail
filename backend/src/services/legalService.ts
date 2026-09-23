@@ -53,7 +53,7 @@ async function callGemini(prompt:string):Promise<ProviderResult|null>{
 }
 
 async function callOpenAICompatible(baseUrl:string,key:string,model:string,prompt:string,provider:string):Promise<ProviderResult|null>{
-  const response=await fetch(baseUrl.replace(/\\/$/,"")+"/chat/completions",{
+  const response=await fetch(baseUrl.replace(/\/$/,"")+"/chat/completions",{
     method:"POST",
     headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
     body:JSON.stringify({model,messages:[{role:"user",content:prompt}],temperature:0.1})
