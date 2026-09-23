@@ -7,7 +7,9 @@ export async function createCase(title:string){return api("/cases",{method:"POST
 export async function getCaseParties(id:string){return api(`/cases/${id}/parties`);}
 export async function addParty(id:string,data:any){return api(`/cases/${id}/parties`,{method:"POST",body:JSON.stringify(data)});}
 export async function getCaseDocuments(id:string){return api(`/cases/${id}/documents`);}
-export async function uploadDocument(id:string,file:File){const body=new FormData();body.append("file",file);return api(`/cases/${id}/documents/upload`,{method:"POST",body});}
+export async function getCaseRequirements(id:string){return api(`/cases/${id}/requirements`);}
+export async function validateCaseRequirement(caseId:string,requirementId:string,valid:boolean,reason?:string){return api(`/cases/${caseId}/requirements/${requirementId}/validate`,{method:"PATCH",body:JSON.stringify({valid,reason})});}
+export async function uploadDocument(id:string,file:File,requirementId?:string){const body=new FormData();body.append("file",file);if(requirementId)body.append("requirementId",requirementId);return api(`/cases/${id}/documents/upload`,{method:"POST",body});}
 export async function transitionCase(id:string,status:string){return api(`/cases/${id}/transition`,{method:"POST",body:JSON.stringify({status})});}
 export async function getHearings(id:string){return api(`/cases/${id}/hearings`);}
 export async function createHearing(id:string,data:any){return api(`/cases/${id}/hearings`,{method:"POST",body:JSON.stringify(data)});}
