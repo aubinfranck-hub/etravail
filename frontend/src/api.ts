@@ -21,3 +21,4 @@ export async function getCalendar(){return api("/calendar");}
 export async function getNotifications(){return api("/notifications");}
 export async function searchDocuments(q:string){return api(`/search/documents?q=${encodeURIComponent(q)}`);}
 export async function getUsers(){return api("/admin/users");}
+export async function updateUserAccess(id:string,data:{role:string;active:boolean}){return api(`/admin/users/${id}`,{method:"PATCH",body:JSON.stringify(data)});}
