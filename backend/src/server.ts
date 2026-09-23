@@ -3,6 +3,7 @@ import cors from "cors";
 import jwt from "jsonwebtoken";
 import multer from "multer";
 import {checkDatabase} from "./db.js";
+import {migrateDatabase} from "./db/migrate.js";
 import {registerCitizen,authenticate} from "./services/userService.js";
 import {listUsers} from "./repositories/userRepository.js";
 import {getCases,openCase,transitionCase} from "./services/caseService.js";
@@ -86,6 +87,8 @@ async function bootstrap(){
   try{
     await checkDatabase();
     console.log("Database connection verified");
+    await migrateDatabase();
+    console.log("Database schema verified");
   }catch(error){console.error("Database connection failed",error);process.exit(1)}
   app.listen(port,()=>console.log(`e-Travail API listening on :${port}`));
 }
