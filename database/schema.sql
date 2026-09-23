@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
+CREATE INDEX IF NOT EXISTS idx_cases_reference ON cases(reference);
 CREATE INDEX IF NOT EXISTS idx_documents_case ON documents(case_id);
+CREATE INDEX IF NOT EXISTS idx_documents_ocr ON documents USING gin (to_tsvector('french', coalesce(ocr_text,'')));
 CREATE INDEX IF NOT EXISTS idx_audit_case ON audit_logs(case_id);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
