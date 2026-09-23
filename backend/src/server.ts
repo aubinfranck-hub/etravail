@@ -5,7 +5,7 @@ import multer from "multer";
 import {checkDatabase} from "./db.js";
 import {migrateDatabase} from "./db/migrate.js";
 import {registerCitizen,authenticate} from "./services/userService.js";
-import {listUsers} from "./repositories/userRepository.js";
+import {listUsers,updateUserAccess} from "./repositories/userRepository.js";
 import {getCases,openCase,transitionCase} from "./services/caseService.js";
 import {findCase} from "./repositories/caseRepository.js";
 import {getParties,addParty} from "./services/partyService.js";
@@ -78,6 +78,17 @@ router.post("/api/v1/notifications",auth,permission("notification:manage"),async
 router.get("/api/v1/cases/:id/audit",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await listAudit(req.params.id)});}catch(e){handleError(res,e,"Journal d'audit indisponible");}});
 router.get("/api/v1/cases/:id/decisions",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await getDecisions(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les décisions");}});
 router.post("/api/v1/cases/:id/decisions",auth,permission("decision:create"),async(req:Req,res:express.Response)=>{if(!req.body?.content)return res.status(400).json({error:"content est obligatoire"});try{const d=await issueDecision({caseId:req.params.id,reference:req.body.reference,content:req.body.content});await writeAudit({actorId:req.user!.id,caseId:req.params.id,action:"DECISION_CREATED",metadata:{decisionId:d.id}});res.status(201).json({data:d});}catch(e){handleError(res,e,"Impossible d'enregistrer la décision");}});
+router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
+  const role=req.body?.role as Role;
+  const active=Boolean(req.body?.active);
+  if(!["CITOYEN","GREFFE","MAGISTRAT","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
+  try{
+    const updated=await updateUserAccess(req.params.id,{role,active});
+    if(!updated)return res.status(404).json({error:"Utilisateur introuvable"});
+    await writeAudit({actorId:req.user!.id,action:"USER_ACCESS_CHANGED",metadata:{userId:updated.id,role:updated.role,active:updated.active}});
+    res.json({data:updated});
+  }catch(e){handleError(res,e,"Impossible de modifier l'utilisateur");}
+});
 router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
   try{res.json({data:await listUsers()});}catch(e){handleError(res,e,"Impossible de récupérer les utilisateurs");}
 });
