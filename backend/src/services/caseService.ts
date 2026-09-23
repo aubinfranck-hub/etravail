@@ -1,35 +1,131 @@
+import { pool } from "../db.js";
 import { createCase, findCase, listCases, updateCaseStatus, assignCase } from "../repositories/caseRepository.js";
 import { writeAudit } from "../repositories/auditRepository.js";
-import { canTransition, CaseStatus } from "../domain/workflow.js";
+import { canTransition, CaseStatus, allowedRolesByTransition, stageForStatus } from "../domain/workflow.js";
+import { notify } from "./notificationService.js";
 
-export async function getCases() {
-  return listCases();
+const NATURES = ["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HARCELEMENT","ACCIDENT_TRAVAIL","AUTRE"] as const;
+
+function classifyNature(title:string){
+  const t=title.toLowerCase();
+  if(/licenci|renvoi|licenciement/.test(t)) return "LICENCIEMENT";
+  if(/salaire|paie|rémun|remuner/.test(t)) return "SALAIRE_IMPAYE";
+  if(/congé|conge/.test(t)) return "CONGES";
+  if(/rupture|résiliation|resiliation|démission|demission/.test(t)) return "RUPTURE_CONTRAT";
+  if(/harcèl|harcel/.test(t)) return "HARCELEMENT";
+  if(/accident|maladie professionnelle/.test(t)) return "ACCIDENT_TRAVAIL";
+  return "AUTRE";
 }
 
-export async function openCase(input: { claimantId: string; title: string; actorId: string }) {
-  const reference = `ET-${new Date().getFullYear()}-${Date.now().toString().slice(-8)}`;
-  const item = await createCase({ reference, title: input.title, claimantId: input.claimantId });
-  await writeAudit({ actorId: input.actorId, caseId: item.id, action: "CASE_CREATED", metadata: { reference } });
+export function normalizeNature(nature:string|undefined,title:string){
+  const value=String(nature??"").trim().toUpperCase();
+  return (NATURES as readonly string[]).includes(value)?value:classifyNature(title);
+}
+
+export async function getCases(){ return listCases(); }
+
+async function seedCaseRequirements(caseId:string,natureCode:string){
+  const rules=await pool.query(
+    `SELECT id,code,label,required,deadline_hours,sort_order FROM workflow_requirements
+     WHERE status='SOUMIS' AND active=true AND (nature_code=$1 OR nature_code IS NULL)
+     ORDER BY sort_order ASC`,[natureCode]);
+  for(const rule of rules.rows){
+    await pool.query(`INSERT INTO case_requirements(case_id,requirement_id) VALUES($1,$2) ON CONFLICT(case_id,requirement_id) DO NOTHING`,[caseId,rule.id]);
+  }
+}
+
+export async function openCase(input:{claimantId:string;title:string;actorId:string;natureCode?:string}){
+  const natureCode=normalizeNature(input.natureCode,input.title);
+  const reference=`ET-${new Date().getFullYear()}-${Date.now().toString().slice(-8)}`;
+  const item=await createCase({reference,title:input.title,claimantId:input.claimantId,natureCode});
+  await seedCaseRequirements(item.id,natureCode);
+  await writeAudit({actorId:input.actorId,caseId:item.id,action:"CASE_CREATED",actorRole:"CITOYEN",metadata:{reference,natureCode}});
+  await writeAudit({actorId:input.actorId,caseId:item.id,action:"CASE_NATURE_CLASSIFIED",actorRole:"CITOYEN",metadata:{natureCode,source:input.natureCode?"USER":"RULE_ENGINE"}});
   return item;
 }
 
-export async function transitionCase(input: { id: string; next: CaseStatus; actorId: string }) {
-  const item = await findCase(input.id);
-  if (!item) throw new Error("CASE_NOT_FOUND");
-  if (!canTransition(item.status as CaseStatus, input.next)) throw new Error("INVALID_TRANSITION");
-  const updated = await updateCaseStatus(input.id, input.next);
-  await writeAudit({
-    actorId: input.actorId,
-    caseId: input.id,
-    action: "CASE_STATUS_CHANGED",
-    metadata: { from: item.status, to: input.next }
-  });
+async function requiredState(caseId:string){
+  const r=await pool.query(`SELECT COUNT(*) FILTER (WHERE wr.required)::int AS required_count,
+    COUNT(*) FILTER (WHERE wr.required AND cr.status IN ('RECEIVED','VALIDATED'))::int AS received_count,
+    COUNT(*) FILTER (WHERE wr.required AND cr.status='VALIDATED')::int AS validated_count
+    FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
+    WHERE cr.case_id=$1`,[caseId]);
+  return r.rows[0]??{required_count:0,received_count:0,validated_count:0};
+}
+
+export async function getRequirements(caseId:string){
+  const r=await pool.query(`SELECT cr.id,cr.case_id,cr.status,cr.document_id,cr.validated_by,cr.validated_at,cr.rejection_reason,
+    wr.status AS stage,wr.code,wr.label,wr.required,wr.deadline_hours,wr.sort_order,
+    d.filename
+    FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
+    LEFT JOIN documents d ON d.id=cr.document_id
+    WHERE cr.case_id=$1 ORDER BY wr.sort_order,wr.label`,[caseId]);
+  return r.rows;
+}
+
+export async function attachRequirementDocument(caseId:string,requirementId:string,documentId:string,actorId:string){
+  const r=await pool.query(`UPDATE case_requirements SET status='RECEIVED',document_id=$1,updated_at=CURRENT_TIMESTAMP
+    WHERE id=$2 AND case_id=$3 RETURNING *`,[documentId,requirementId,caseId]);
+  if(!r.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
+  await writeAudit({actorId,caseId,action:"DOCUMENT_REQUIREMENT_RECEIVED",metadata:{requirementId,documentId}});
+  return r.rows[0];
+}
+
+export async function validateRequirement(caseId:string,requirementId:string,actorId:string,valid:boolean,reason?:string){
+  const status=valid?"VALIDATED":"REJECTED";
+  const r=await pool.query(`UPDATE case_requirements SET status=$1,validated_by=$2,validated_at=CURRENT_TIMESTAMP,rejection_reason=$3,updated_at=CURRENT_TIMESTAMP
+    WHERE id=$4 AND case_id=$5 RETURNING *`,[status,actorId,valid?null:(reason??"Pièce rejetée"),requirementId,caseId]);
+  if(!r.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
+  await writeAudit({actorId,caseId,action:valid?"DOCUMENT_VALIDATED":"DOCUMENT_REJECTED",metadata:{requirementId,status,reason:valid?null:reason}});
+  return r.rows[0];
+}
+
+async function autoAssign(caseId:string,role:"GREFFE"|"MAGISTRAT",reason:string){
+  const r=await pool.query(`SELECT u.id,u.full_name,
+    COUNT(c.id) FILTER (WHERE c.status NOT IN ('ARCHIVE') AND c.assigned_to=u.id)::int AS workload
+    FROM users u LEFT JOIN cases c ON c.assigned_to=u.id
+    WHERE u.role=$1 AND u.active=true GROUP BY u.id,u.full_name ORDER BY workload ASC,u.created_at ASC LIMIT 1`,[role]);
+  const target=r.rows[0];
+  if(!target) return null;
+  const updated=await assignCase(caseId,target.id,role);
+  await pool.query(`INSERT INTO case_assignments(case_id,assigned_to,assigned_role,assignment_type,reason)
+    VALUES($1,$2,$3,'AUTO',$4)`,[caseId,target.id,role,reason]);
+  await writeAudit({caseId,action:"CASE_AUTO_ASSIGNED",actorRole:"SYSTEM",metadata:{assignedTo:target.id,assignedRole:role,workloadBefore:Number(target.workload),reason}});
+  const c=await findCase(caseId);
+  if(c) await notify({userId:target.id,caseId,channel:"IN_APP",subject:"Nouveau dossier affecté",body:`Le dossier ${c.reference} vous est affecté à l'étape ${stageForStatus(c.status as CaseStatus)}.`});
   return updated;
 }
 
-export async function assignCaseTo(input:{id:string;assignedTo:string|null;assignedRole:string|null;actorId:string}){
+async function setDueDate(caseId:string,status:CaseStatus){
+  const r=await pool.query(`SELECT MIN(wr.deadline_hours)::int AS hours
+    FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
+    WHERE cr.case_id=$1 AND wr.status=$2 AND wr.active=true AND wr.deadline_hours IS NOT NULL`,[caseId,status]);
+  const hours=Number(r.rows[0]?.hours??0);
+  if(hours>0) await pool.query("UPDATE cases SET due_at=CURRENT_TIMESTAMP + ($2 || ' hours')::interval WHERE id=$1",[caseId,String(hours)]);
+}
+
+export async function transitionCase(input:{id:string;next:CaseStatus;actorId:string;actorRole?:string}){
+  const item=await findCase(input.id); if(!item) throw new Error("CASE_NOT_FOUND");
+  if(!canTransition(item.status as CaseStatus,input.next)) throw new Error("INVALID_TRANSITION");
+  const roles=allowedRolesByTransition[`${item.status}->${input.next}`];
+  if(roles&&input.actorRole&&!roles.includes(input.actorRole)) throw new Error("ROLE_CANNOT_TRANSITION");
+  const req=await requiredState(input.id);
+  if(input.next==="SOUMIS" && Number(req.required_count)>Number(req.received_count)) throw new Error("REQUIRED_DOCUMENTS_MISSING");
+  if(input.next==="COMPLET" && Number(req.required_count)>Number(req.validated_count)) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
+  const updated=await updateCaseStatus(input.id,input.next);
+  await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus(input.next),requirements:req}});
+  await setDueDate(input.id,input.next);
+  if(input.next==="SOUMIS") await autoAssign(input.id,"GREFFE","Soumission du dossier");
+  if(input.next==="ENROLEMENT") await autoAssign(input.id,"MAGISTRAT","Enrôlement après contrôle");
+  return updated;
+}
+
+export async function assignCaseTo(input:{id:string;assignedTo:string|null;assignedRole:string|null;actorId:string;reason?:string}){
  const item=await findCase(input.id); if(!item) throw new Error("CASE_NOT_FOUND");
  const updated=await assignCase(input.id,input.assignedTo,input.assignedRole);
- await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_ASSIGNED",metadata:{assignedTo:input.assignedTo,assignedRole:input.assignedRole}});
+ await pool.query(`INSERT INTO case_assignments(case_id,assigned_to,assigned_role,assigned_by,assignment_type,reason)
+   VALUES($1,$2,$3,$4,$5,$6)`,[input.id,input.assignedTo,input.assignedRole,input.actorId,item.assigned_to?"REASSIGNMENT":"MANUAL",input.reason??null]);
+ await writeAudit({actorId:input.actorId,caseId:input.id,action:item.assigned_to?"CASE_REASSIGNED":"CASE_ASSIGNED",metadata:{fromAssignedTo:item.assigned_to,fromAssignedRole:item.assigned_role,assignedTo:input.assignedTo,assignedRole:input.assignedRole,reason:input.reason??null}});
+ if(input.assignedTo&&updated) await notify({userId:input.assignedTo,caseId:input.id,channel:"IN_APP",subject:"Dossier affecté",body:`Le dossier ${updated.reference} vous est affecté. Action requise à l'étape ${stageForStatus(updated.status as CaseStatus)}.`});
  return updated;
 }
