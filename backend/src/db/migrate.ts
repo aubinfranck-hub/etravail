@@ -86,10 +86,10 @@ async function seedLegalCorpus(){
     parsedText+=content.items.map((item:any)=>typeof item.str==="string"?item.str:"").join(" ")+"\n";
   }
   await pdf.destroy();
-  console.log("Legal PDF parsed text length: "+parsedText.length);
+
   const articles=parseLegalArticles(parsedText);
-  console.log("Legal corpus parser found "+articles.length+" article blocks");
-  if(articles.length<10) throw new Error("LEGAL_CORPUS_TOO_SMALL");
+
+  if(articles.length<100) throw new Error("LEGAL_CORPUS_TOO_SMALL");
   const client=await pool.connect();
   try{
     await client.query("BEGIN");
@@ -102,7 +102,8 @@ async function seedLegalCorpus(){
       );
     }
     await client.query("COMMIT");
-    console.log("Legal corpus seeded: "+articles.length+" articles");
+    const validation=await pool.query("SELECT COUNT(*)::int AS count FROM legal_sources WHERE active=true AND to_tsvector('french',coalesce(content,'')) @@ plainto_tsquery('french',$1)",["licenciement"]);
+    console.log("Legal search validation — licenciement matches: "+validation.rows[0]?.count);
   }catch(error){ await client.query("ROLLBACK"); throw error; }finally{ client.release(); }
 }
 
