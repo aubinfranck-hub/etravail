@@ -39,7 +39,7 @@ function validateOfficialUrl(value: unknown) {
 type ProviderResult={answer:string;model:string;provider:string};
 
 async function callGemini(prompt:string):Promise<ProviderResult|null>{
-  const key=process.env.GEMINI_API_KEY;
+  const key=process.env.GEMINI_API_KEY??process.env.GOOGLE_GEMINI_API_KEY;
   if(!key)return null;
   const model=process.env.GEMINI_MODEL??"gemini-2.5-flash";
   const response=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,{
@@ -68,7 +68,7 @@ async function generateLegalAnswer(prompt:string):Promise<ProviderResult|null>{
   const gemini=await callGemini(prompt);
   if(gemini)return gemini;
 
-  const deepseekKey=process.env.DEEPSEEK_API_KEY;
+  const deepseekKey=process.env.DEEPSEEK_API_KEY??process.env.DEEPSEEK_KEY;
   if(deepseekKey){
     const result=await callOpenAICompatible(
       process.env.DEEPSEEK_BASE_URL??"https://api.deepseek.com/v1",
