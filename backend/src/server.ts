@@ -22,7 +22,9 @@ import {listAudit,writeAudit} from "./repositories/auditRepository.js";
 import {hasPermission,type Role} from "./auth/permissions.js";
 import type {CaseStatus} from "./domain/workflow.js";
 
-const app=express(), port=Number(process.env.APP_PORT??3000), jwtSecret=process.env.JWT_SECRET??"development-only-change-me";
+const app=express(), port=Number(process.env.APP_PORT??3000), isProduction=process.env.APP_ENV==="production", jwtSecret=process.env.JWT_SECRET??"development-only-change-me";
+if(isProduction&&(!process.env.JWT_SECRET||process.env.JWT_SECRET.length<32))throw new Error("JWT_SECRET must be set to at least 32 characters in production");
+if(isProduction&&!process.env.CORS_ORIGIN)throw new Error("CORS_ORIGIN must be set in production");
 app.use(cors({origin:process.env.CORS_ORIGIN?.split(",")??true}));
 app.use(express.json({limit:"2mb"}));
 const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:20*1024*1024}});
