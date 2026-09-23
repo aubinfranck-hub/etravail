@@ -36,7 +36,7 @@ export async function migrateDatabase(){
 }
 
 
-const LEGAL_CORPUS_URL = "https://agp.africanlii.org/fr/akn/ci/act/2015/532/fra@2023-08-10";
+const LEGAL_CORPUS_URL = "https://www.famille.gouv.ci/public/front/docs/RCI-Code-2015-travail.pdf";
 const LEGAL_OFFICIAL_REFERENCE_URL = "https://www.famille.gouv.ci/public/front/docs/RCI-Code-2015-travail.pdf";
 
 function decodeHtml(value:string){
@@ -74,9 +74,20 @@ async function seedLegalCorpus(){
   if(Number(existing.rows[0]?.count??0)>0){ console.log("Legal corpus already seeded; skipping"); return; }
   const response=await fetch(LEGAL_CORPUS_URL,{signal:AbortSignal.timeout(30000)});
   if(!response.ok) throw new Error("LEGAL_CORPUS_FETCH_FAILED");
-  const html=await response.text();
-  console.log("Legal HTML length: "+html.length);
-  const articles=parseLegalArticles(html);
+  const pdfData=new Uint8Array(await response.arrayBuffer());
+  // @ts-ignore pdfjs-dist ESM typing varies by installed version.
+  const pdfjs:any=await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const loadingTask=pdfjs.getDocument({data:pdfData,useWorkerFetch:false,isEvalSupported:false});
+  const pdf=await loadingTask.promise;
+  let parsedText="";
+  for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+    const page=await pdf.getPage(pageNo);
+    const content=await page.getTextContent();
+    parsedText+=content.items.map((item:any)=>typeof item.str==="string"?item.str:"").join(" ")+"\n";
+  }
+  await pdf.destroy();
+  console.log("Legal PDF parsed text length: "+parsedText.length);
+  const articles=parseLegalArticles(parsedText);
   console.log("Legal corpus parser found "+articles.length+" article blocks");
   if(articles.length<10) throw new Error("LEGAL_CORPUS_TOO_SMALL");
   const client=await pool.connect();
