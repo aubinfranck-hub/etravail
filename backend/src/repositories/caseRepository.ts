@@ -10,11 +10,13 @@ export interface CaseRecord {
   updated_at: string;
   assigned_to?: string | null;
   assigned_role?: string | null;
+  nature_code?: string | null;
+  due_at?: string | null;
 }
 
 export async function listCases(): Promise<CaseRecord[]> {
   const result = await pool.query(
-    "SELECT id, reference, title, claimant_id, status, assigned_to, assigned_role, created_at, updated_at FROM cases ORDER BY created_at DESC"
+    "SELECT id, reference, title, claimant_id, status, assigned_to, assigned_role, nature_code, due_at, created_at, updated_at FROM cases ORDER BY created_at DESC"
   );
   return result.rows;
 }
@@ -23,19 +25,20 @@ export async function createCase(input: {
   reference: string;
   title: string;
   claimantId: string;
+  natureCode?: string;
 }): Promise<CaseRecord> {
   const result = await pool.query(
-    `INSERT INTO cases (reference, title, claimant_id)
-     VALUES ($1, $2, $3)
-     RETURNING id, reference, title, claimant_id, status, assigned_to, assigned_role, created_at, updated_at`,
-    [input.reference, input.title, input.claimantId]
+    `INSERT INTO cases (reference, title, claimant_id, nature_code)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, reference, title, claimant_id, status, assigned_to, assigned_role, nature_code, due_at, created_at, updated_at`,
+    [input.reference, input.title, input.claimantId, input.natureCode ?? 'AUTRE']
   );
   return result.rows[0];
 }
 
 export async function findCase(id: string): Promise<CaseRecord | null> {
   const result = await pool.query(
-    "SELECT id, reference, title, claimant_id, status, created_at, updated_at FROM cases WHERE id = $1",
+    "SELECT id, reference, title, claimant_id, status, assigned_to, assigned_role, nature_code, due_at, created_at, updated_at FROM cases WHERE id = $1",
     [id]
   );
   return result.rows[0] ?? null;
@@ -45,7 +48,7 @@ export async function updateCaseStatus(id: string, status: string): Promise<Case
   const result = await pool.query(
     `UPDATE cases SET status = $1, updated_at = CURRENT_TIMESTAMP
      WHERE id = $2
-     RETURNING id, reference, title, claimant_id, status, created_at, updated_at`,
+     RETURNING id, reference, title, claimant_id, status, assigned_to, assigned_role, nature_code, due_at, created_at, updated_at`,
     [status, id]
   );
   return result.rows[0] ?? null;
