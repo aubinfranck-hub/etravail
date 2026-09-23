@@ -57,6 +57,20 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
+
+CREATE TABLE IF NOT EXISTS enrollments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_id UUID NOT NULL UNIQUE REFERENCES cases(id) ON DELETE CASCADE,
+  fee_amount NUMERIC(14,2),
+  currency VARCHAR(10) NOT NULL DEFAULT 'XOF',
+  payment_status VARCHAR(30) NOT NULL DEFAULT 'A_PAYER'
+    CHECK (payment_status IN ('A_PAYER','PAYE','EXONERE','ANNULE')),
+  payment_reference VARCHAR(120),
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_enrollments_payment_status ON enrollments(payment_status);
 CREATE INDEX IF NOT EXISTS idx_cases_reference ON cases(reference);
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS assigned_role VARCHAR(30);
