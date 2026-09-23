@@ -7,7 +7,7 @@
     "dev": "tsx src/server.ts",
     "build": "npm test && tsc",
     "start": "node dist/server.js",
-    "test": "tsx --test src/*.test.ts",
+    "test": "tsx --test src/*.test.ts src/domain/*.test.ts",
     "migrate": "tsx src/db/migrate.ts"
   },
   "dependencies": {
