@@ -44,21 +44,27 @@ function decodeHtml(value:string){
 }
 
 export function parseLegalArticles(html:string){
-  const withoutNoise=html.replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<br\s*\/?>/gi,"\n").replace(/<\/(?:p|div|h[1-6]|li|tr|td|section|article)>/gi,"\n").replace(/<[^>]+>/g," ");
-  const text=decodeHtml(withoutNoise).replace(/\r/g,"").replace(/[ \t]+/g," ").replace(/\n[ \t]+/g,"\n").trim();
-  const lawStart=text.search(/LOI N[°º] 2015-532 DU 20 JUILLET 2015 PORTANT CODE DU TRAVAIL/i);
-  if(lawStart<0) throw new Error("LEGAL_CORPUS_START_NOT_FOUND");
-  const conventionStart=text.indexOf("LA CONVENTION COLLECTIVE INTERPROFESSIONNELLE",lawStart+1000);
-  const corpus=text.slice(lawStart,conventionStart>lawStart?conventionStart:text.length);
-  const marker=/(?:ARTICLE|ART\.?)[ \t]+(\d+(?:\.\d+)?)(?:[ \t]*[-–—:.]?)/gi;
-  const matches=[...corpus.matchAll(marker)];
+  const withoutNoise=html
+    .replace(/<script[\\s\\S]*?<\\/script>/gi," ")
+    .replace(/<style[\\s\\S]*?<\\/style>/gi," ")
+    .replace(/<br\\s*\\/?>/gi,"\\n")
+    .replace(/<\\/(?:p|div|h[1-6]|li|tr|td|section|article)>/gi,"\\n")
+    .replace(/<[^>]+>/g," ");
+  const text=decodeHtml(withoutNoise)
+    .replace(/\\r/g,"")
+    .replace(/[ \\t]+/g," ")
+    .replace(/\\n[ \\t]+/g,"\\n")
+    .trim();
+
+  const marker=/(?:^|\\n)\\s*(?:ARTICLE|ART\\.?)\\s+(\\d+(?:\\.\\d+)?)(?:\\s*[-–—:.]?)(?=\\s)/gim;
+  const matches=[...text.matchAll(marker)];
   const articles:{number:string;content:string}[]=[];
   for(let i=0;i<matches.length;i++){
     const start=matches[i].index??0;
     const bodyStart=start+(matches[i][0]?.length??0);
-    const end=i+1<matches.length?(matches[i+1].index??corpus.length):corpus.length;
-    const content=corpus.slice(bodyStart,end).replace(/\s+/g," ").trim();
-    if(content.length>=80) articles.push({number:matches[i][1],content});
+    const end=i+1<matches.length?(matches[i+1].index??text.length):text.length;
+    const content=text.slice(bodyStart,end).replace(/\\s+/g," ").trim();
+    if(content.length>=120) articles.push({number:matches[i][1],content});
   }
   return articles;
 }
