@@ -45,25 +45,25 @@ function decodeHtml(value:string){
 
 export function parseLegalArticles(html:string){
   const withoutNoise=html
-    .replace(/<script[\\s\\S]*?<\\/script>/gi," ")
-    .replace(/<style[\\s\\S]*?<\\/style>/gi," ")
-    .replace(/<br\\s*\\/?>/gi,"\\n")
-    .replace(/<\\/(?:p|div|h[1-6]|li|tr|td|section|article)>/gi,"\\n")
+    .replace(/<script[\s\S]*?<\/script>/gi," ")
+    .replace(/<style[\s\S]*?<\/style>/gi," ")
+    .replace(/<br\s*\/?>/gi,"\n")
+    .replace(/<\/(?:p|div|h[1-6]|li|tr|td|section|article)>/gi,"\n")
     .replace(/<[^>]+>/g," ");
   const text=decodeHtml(withoutNoise)
-    .replace(/\\r/g,"")
-    .replace(/[ \\t]+/g," ")
-    .replace(/\\n[ \\t]+/g,"\\n")
+    .replace(/\r/g,"")
+    .replace(/[ \t]+/g," ")
+    .replace(/\n[ \t]+/g,"\n")
     .trim();
 
-  const marker=/(?:^|\\n)\\s*(?:ARTICLE|ART\\.?)\\s+(\\d+(?:\\.\\d+)?)(?:\\s*[-–—:.]?)(?=\\s)/gim;
+  const marker=/(?:^|\n)\s*(?:ARTICLE|ART\.?)\s+(\d+(?:\.\d+)?)(?:\s*[-–—:.]?)(?=\s)/gim;
   const matches=[...text.matchAll(marker)];
   const articles:{number:string;content:string}[]=[];
   for(let i=0;i<matches.length;i++){
     const start=matches[i].index??0;
     const bodyStart=start+(matches[i][0]?.length??0);
     const end=i+1<matches.length?(matches[i+1].index??text.length):text.length;
-    const content=text.slice(bodyStart,end).replace(/\\s+/g," ").trim();
+    const content=text.slice(bodyStart,end).replace(/\s+/g," ").trim();
     if(content.length>=120) articles.push({number:matches[i][1],content});
   }
   return articles;
