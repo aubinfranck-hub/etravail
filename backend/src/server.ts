@@ -118,8 +118,14 @@ router.get("/api/v1/legal/sources",auth,permission("legal:read"),async(req:Req,r
 });
 router.post("/api/v1/ai/assist",rateLimit(20,10*60*1000),auth,permission("legal:read"),async(req:Req,res:express.Response)=>{
   if(!req.body?.question)return res.status(400).json({error:"question obligatoire"});
-  try{res.json({data:await assistLegal({userId:req.user!.id,caseId:req.body.caseId,question:String(req.body.question)})});}
-  catch(e){handleError(res,e,"Assistance juridique indisponible");}
+  try{
+    const caseId=req.body?.caseId?String(req.body.caseId):undefined;
+    if(caseId){
+      const a=await caseAccess(req,caseId);
+      if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});
+    }
+    res.json({data:await assistLegal({userId:req.user!.id,caseId,question:String(req.body.question)})});
+  }catch(e){handleError(res,e,"Assistance juridique indisponible");}
 });
 router.post("/api/v1/admin/legal/sources",auth,permission("legal:manage"),async(req:Req,res:express.Response)=>{
   try{const source=await addLegalSource({...req.body,createdBy:req.user!.id});await writeAudit({actorId:req.user!.id,action:"LEGAL_SOURCE_CREATED",metadata:{sourceId:source.id,title:source.title}});res.status(201).json({data:source});}
