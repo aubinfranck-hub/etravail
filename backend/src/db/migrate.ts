@@ -33,6 +33,7 @@ export async function migrateDatabase(){
   if(adminEmail&&adminPassword) await seedUser(adminEmail,adminPassword,"ADMIN","Administrateur e-Travail");
   if(userEmail&&userPassword) await seedUser(userEmail,userPassword,"CITOYEN","Utilisateur test e-Travail");
   await seedLegalCorpus();
+  await seedLabourAmendment2021();
 }
 
 
@@ -105,6 +106,32 @@ async function seedLegalCorpus(){
     const validation=await pool.query("SELECT COUNT(*)::int AS count FROM legal_sources WHERE active=true AND to_tsvector('french',coalesce(content,'')) @@ plainto_tsquery('french',$1)",["licenciement"]);
     console.log("Legal search validation — licenciement matches: "+validation.rows[0]?.count);
   }catch(error){ await client.query("ROLLBACK"); throw error; }finally{ client.release(); }
+}
+
+async function seedLabourAmendment2021(){
+  try{
+    const existing=await pool.query("SELECT COUNT(*)::int AS count FROM legal_sources WHERE source_type=$1 AND version_label=$2",["CODE_DU_TRAVAIL_AMENDEMENT","2021"]);
+    if(Number(existing.rows[0]?.count??0)>0) return;
+    const url="https://loidici.biz/2023/09/20/ordonnance-n-2021-902-du-22-decembre-2021-modifiant-la-loi-n-2015-532-du-20-juillet-2015-portant-code-du-travailratifiee-par-la-loi-2023-594-du-07-06-2023/lois-article-par-article/codes/le-code-du-travail/45824/naty/";
+    const response=await fetch(url,{signal:AbortSignal.timeout(20000)});
+    if(!response.ok) throw new Error("LEGAL_AMENDMENT_FETCH_FAILED");
+    const articles=parseLegalArticles(await response.text()).filter(a=>/^13\.3|^16\.6|^16\.11|^18\.11|^18\.14|^23\.1|^23\.13|^25\.2|^73\.2|^1$/.test(a.number));
+    if(articles.length<9) throw new Error("LEGAL_AMENDMENT_TOO_SMALL");
+    const client=await pool.connect();
+    try{
+      await client.query("BEGIN");
+      for(const article of articles){
+        const content="Ordonnance n°2021-902 — Article "+article.number+". "+article.content;
+        const hash=crypto.createHash("sha256").update(content).digest("hex");
+        await client.query(
+          "INSERT INTO legal_sources(title,jurisdiction,source_type,official_url,version_label,published_at,content,content_hash,active) SELECT $1,'COTE_D_IVOIRE','CODE_DU_TRAVAIL_AMENDEMENT',$2,'2021','2021-12-22',$3,$4::varchar,TRUE WHERE NOT EXISTS (SELECT 1 FROM legal_sources WHERE source_type='CODE_DU_TRAVAIL_AMENDEMENT' AND content_hash=$4::varchar)",
+          ["Code du travail ivoirien — Ordonnance 2021-902 — Article "+article.number,"https://jorci.oneci.ci/journaux-officiels/352",content,hash]
+        );
+      }
+      await client.query("COMMIT");
+      console.log("Labour Code amendment 2021 seeded: "+articles.length+" articles");
+    }catch(error){ await client.query("ROLLBACK"); throw error; }finally{ client.release(); }
+  }catch(error){ console.warn("Optional 2021 labour amendment seed skipped",error); }
 }
 
 if(import.meta.url===`file://${process.argv[1]}`){
