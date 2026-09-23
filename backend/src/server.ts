@@ -6,7 +6,7 @@ import {checkDatabase} from "./db.js";
 import {migrateDatabase} from "./db/migrate.js";
 import {registerCitizen,authenticate} from "./services/userService.js";
 import {listUsers,updateUserAccess,findUserById} from "./repositories/userRepository.js";
-import {getCases,openCase,transitionCase} from "./services/caseService.js";
+import {getCases,openCase,transitionCase,assignCaseTo} from "./services/caseService.js";
 import {findCase} from "./repositories/caseRepository.js";
 import {getParties,addParty} from "./services/partyService.js";
 import {getDocuments,registerDocument} from "./services/documentService.js";
@@ -99,6 +99,16 @@ router.post("/api/v1/notifications",auth,permission("notification:manage"),async
 router.get("/api/v1/cases/:id/audit",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await listAudit(req.params.id)});}catch(e){handleError(res,e,"Journal d'audit indisponible");}});
 router.get("/api/v1/cases/:id/decisions",auth,async(req:Req,res:express.Response)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});if(req.user?.role!=="CITOYEN"&&!hasPermission(req.user!.role,"case:read"))return res.status(403).json({error:"Permission refusée"});try{res.json({data:await getDecisions(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les décisions");}});
 router.post("/api/v1/cases/:id/decisions",auth,permission("decision:create"),async(req:Req,res:express.Response)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});if(!req.body?.content)return res.status(400).json({error:"content est obligatoire"});try{const d=await issueDecision({caseId:req.params.id,reference:req.body.reference,content:req.body.content});await writeAudit({actorId:req.user!.id,caseId:req.params.id,action:"DECISION_CREATED",metadata:{decisionId:d.id}});res.status(201).json({data:d});}catch(e){handleError(res,e,"Impossible d'enregistrer la décision");}});
+router.patch("/api/v1/admin/cases/:id/assignment",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
+ try{
+  const assignedTo=req.body?.assignedTo?String(req.body.assignedTo):null;
+  const assignedRole=req.body?.assignedRole?String(req.body.assignedRole):null;
+  if(assignedTo){const u=await findUserById(assignedTo);if(!u||!u.active||!["GREFFE","MAGISTRAT"].includes(u.role))return res.status(400).json({error:"Agent d'affectation invalide"});}
+  if(assignedRole&&!["GREFFE","MAGISTRAT"].includes(assignedRole))return res.status(400).json({error:"Rôle d'affectation invalide"});
+  const data=await assignCaseTo({id:req.params.id,assignedTo,assignedRole,actorId:req.user!.id});
+  res.json({data});
+ }catch(e){handleError(res,e,"Impossible d'affecter le dossier");}
+});
 router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
   const role=req.body?.role as Role;
   const active=Boolean(req.body?.active);
