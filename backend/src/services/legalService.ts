@@ -101,13 +101,10 @@ export async function assistLegal(input:{userId:string;question:string;caseId?:s
   const question=input.question.trim();
   if(question.length<5)throw new Error("QUERY_TOO_SHORT");
   const sources=await searchLegalSources(question);
-  if(!sources.length){
-    const answer="Les sources juridiques actuellement indexées ne permettent pas de répondre de manière suffisamment fondée à cette question.";
-    await logAIAssistance({userId:input.userId,caseId:input.caseId,question,answer,sources,model:"retrieval-only"});
-    return {answer,sources,model:"retrieval-only",provider:"none",grounded:false};
-  }
   const context=sources.map((s:any,i:number)=>`[SOURCE ${i+1}] ${s.title} — ${s.source_type} — ${s.official_url??"URL non renseignée"}\\n${s.excerpt??""}`).join("\\n\\n");
-  const prompt=`Tu es un assistant juridique administratif pour e-Travail. Tu n'es ni juge ni avocat et tu ne rends aucune décision. Réponds uniquement à partir des sources fournies. Distingue clairement ce qui est établi de ce qui doit être vérifié. Cite les sources par [SOURCE n]. Si les sources ne permettent pas de répondre, dis-le explicitement. Question: ${question}\\n\\nSources:\\n${context}`;
+  const prompt=sources.length
+    ? `Tu es un assistant juridique administratif pour e-Travail. Tu n'es ni juge ni avocat et tu ne rends aucune décision. Réponds uniquement à partir des sources fournies. Distingue clairement ce qui est établi de ce qui doit être vérifié. Cite les sources par [SOURCE n]. Question: ${question}\\n\\nSources:\\n${context}`
+    : `Tu es un assistant juridique administratif pour e-Travail en Côte d'Ivoire. Tu n'es ni juge ni avocat et tu ne rends aucune décision. Aucune source juridique indexée n'a été retrouvée pour cette question. Donne une orientation générale prudente, indique clairement qu'elle doit être vérifiée dans le Code du travail et les textes applicables, et n'invente ni article ni jurisprudence. Question: ${question}`;
   const generated=await generateLegalAnswer(prompt);
   if(!generated){
     const answer="Les sources ont été retrouvées, mais aucun fournisseur IA configuré n'a pu générer la réponse. Vérification humaine requise.";
@@ -115,5 +112,5 @@ export async function assistLegal(input:{userId:string;question:string;caseId?:s
     return {answer,sources,model:"retrieval-only",provider:"none",grounded:true};
   }
   await logAIAssistance({userId:input.userId,caseId:input.caseId,question,answer:generated.answer,sources,model:`${generated.provider}:${generated.model}`});
-  return {answer:generated.answer,sources,model:generated.model,provider:generated.provider,grounded:true};
+  return {answer:generated.answer,sources,model:generated.model,provider:generated.provider,grounded:sources.length>0};
 }
