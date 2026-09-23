@@ -1,5 +1,7 @@
 import { pool } from "../db.js";
 
+export async function findDocumentById(id:string){const r=await pool.query("SELECT id,case_id,uploaded_by,filename,storage_key,mime_type,file_size,ocr_text,created_at FROM documents WHERE id=$1",[id]);return r.rows[0]??null;}
+
 export async function listDocuments(caseId: string) {
   const result = await pool.query(
     "SELECT id,case_id,uploaded_by,filename,storage_key,mime_type,file_size,ocr_text,created_at FROM documents WHERE case_id=$1 ORDER BY created_at DESC",
