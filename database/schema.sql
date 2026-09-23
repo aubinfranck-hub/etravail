@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash TEXT,
   role VARCHAR(30) NOT NULL CHECK (role IN ('CITOYEN','GREFFE','MAGISTRAT','ADMIN')),
+  full_name VARCHAR(255),
+  phone VARCHAR(40),
+  active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -24,15 +27,18 @@ CREATE TABLE IF NOT EXISTS parties (
   case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
   type VARCHAR(30) NOT NULL,
   full_name VARCHAR(255) NOT NULL,
-  contact VARCHAR(255)
+  contact VARCHAR(255),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  uploaded_by UUID REFERENCES users(id),
   filename VARCHAR(255) NOT NULL,
   storage_key TEXT NOT NULL,
   mime_type VARCHAR(120),
+  file_size BIGINT,
   ocr_text TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -76,3 +82,4 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE INDEX IF NOT EXISTS idx_documents_case ON documents(case_id);
 CREATE INDEX IF NOT EXISTS idx_audit_case ON audit_logs(case_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
