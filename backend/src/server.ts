@@ -25,6 +25,8 @@ import { saveDocument, readDocument } from "./storage/localStorage.js";
 import { extractText } from "./services/ocrService.js";
 import { updateOCRText } from "./repositories/documentRepository.js";
 import { searchInDocuments } from "./services/searchService.js";
+import { getDashboard } from "./services/dashboardService.js";
+import { getDecisions, issueDecision } from "./services/decisionService.js";
 import multer from "multer";
 import { getCases, openCase, transitionCase } from "./services/caseService.js";
 import type { CaseStatus } from "./domain/workflow.js";
@@ -92,6 +94,22 @@ app.post("/api/v1/auth/dev-login", (req, res) => {
   if (!user) return res.status(401).json({ error: "Utilisateur de développement inconnu" });
   const token = jwt.sign(user, jwtSecret, { expiresIn: "8h" });
   res.json({ token, user });
+});
+
+app.get("/api/v1/dashboard", auth, async (req: AuthedRequest, res) => {
+  try { res.json({data:await getDashboard(req.user!.role,req.user!.id)}); }
+  catch { res.status(500).json({error:"Tableau de bord indisponible"}); }
+});
+
+app.get("/api/v1/cases/:id/decisions", auth, permission("case:read"), async (req,res)=>{
+  try { res.json({data:await getDecisions(req.params.id)}); }
+  catch { res.status(500).json({error:"Impossible de récupérer les décisions"}); }
+});
+
+app.post("/api/v1/cases/:id/decisions", auth, permission("decision:create"), async (req,res)=>{
+  if(!req.body?.content) return res.status(400).json({error:"content est obligatoire"});
+  try { res.status(201).json({data:await issueDecision({caseId:req.params.id,reference:req.body.reference,content:req.body.content})}); }
+  catch(error) { if(error instanceof Error && error.message==="DECISION_TOO_SHORT") return res.status(400).json({error:"Décision trop courte"}); res.status(500).json({error:"Impossible d'enregistrer la décision"}); }
 });
 
 app.get("/api/v1/search/documents", auth, permission("case:read"), async (req, res) => {
