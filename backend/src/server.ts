@@ -116,6 +116,8 @@ router.patch("/api/v1/admin/cases/:id/assignment",auth,permission("admin:manage"
   const assignedTo=req.body?.assignedTo?String(req.body.assignedTo):null;
   const assignedRole=req.body?.assignedRole?String(req.body.assignedRole):null;
   if(assignedTo){const u=await findUserById(assignedTo);if(!u||!u.active||!["GREFFE","MAGISTRAT"].includes(u.role))return res.status(400).json({error:"Agent d'affectation invalide"});}
+  if(assignedTo&&!assignedRole)return res.status(400).json({error:"Le rôle est obligatoire pour une affectation"});
+  if(assignedTo&&assignedRole){const target=await findUserById(assignedTo);if(!target||target.role!==assignedRole)return res.status(400).json({error:"Le rôle choisi ne correspond pas à l'agent"});}
   if(assignedRole&&!["GREFFE","MAGISTRAT"].includes(assignedRole))return res.status(400).json({error:"Rôle d'affectation invalide"});
   const data=await assignCaseTo({id:req.params.id,assignedTo,assignedRole,actorId:req.user!.id,reason:req.body?.reason?String(req.body.reason):undefined});
   res.json({data});
