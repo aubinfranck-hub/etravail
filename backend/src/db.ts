@@ -1,31 +1,38 @@
 import pg from "pg";
 const {Pool}=pg;
 
-function getDatabaseUrl(): string | undefined {
-  const raw=process.env.DATABASE_URL;
-  if(!raw) return undefined;
+const rawDatabaseUrl=process.env.DATABASE_URL;
+
+function getDatabaseConfig(): Record<string,unknown> {
+  if(!rawDatabaseUrl) return {};
   try {
-    const url=new URL(raw);
-    if(url.hostname==="base"){
-      url.hostname="dpg-daptqa2jnfac73e07670-a.frankfurt-postgres.render.com";
-    }
-    return url.toString();
+    const url=new URL(rawDatabaseUrl);
+    const host=url.hostname==="base"
+      ?"dpg-daptqa2jnfac73e07670-a.frankfurt-postgres.render.com"
+      :url.hostname;
+    return {
+      host,
+      port:url.port?Number(url.port):5432,
+      user:decodeURIComponent(url.username),
+      password:decodeURIComponent(url.password),
+      database:url.pathname.replace(/^\//,""),
+    };
   } catch {
-    return raw;
+    return {connectionString:rawDatabaseUrl};
   }
 }
 
-const databaseUrl=getDatabaseUrl();
+const databaseConfig=getDatabaseConfig();
 
 export const pool=new Pool({
-  connectionString:databaseUrl,
+  ...databaseConfig,
   max:10,
   idleTimeoutMillis:30000,
   ssl:process.env.NODE_ENV==="production"?{rejectUnauthorized:false}:undefined
 });
 
 export async function checkDatabase():Promise<boolean>{
-  if(!databaseUrl)return false;
+  if(!rawDatabaseUrl)return false;
   const client=await pool.connect();
   try{
     await client.query("SELECT 1");
