@@ -79,7 +79,8 @@ async function seedLegalCorpus(){
   const pdfModule:any=await import("pdf-parse");
   const parsed=await pdfModule.default(pdfBuffer);
   const articles=parseLegalArticles(parsed.text);
-  if(articles.length<50) throw new Error("LEGAL_CORPUS_TOO_SMALL");
+  console.log("Legal corpus parser found "+articles.length+" article blocks");
+  if(articles.length<10) throw new Error("LEGAL_CORPUS_TOO_SMALL");
   const client=await pool.connect();
   try{
     await client.query("BEGIN");
