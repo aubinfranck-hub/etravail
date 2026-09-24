@@ -1,7 +1,7 @@
 import { pool } from "../db.js";
 import { createCase, findCase, listCases, updateCaseStatus, assignCase } from "../repositories/caseRepository.js";
 import { writeAudit } from "../repositories/auditRepository.js";
-import { canTransition, allowedRolesByTransition, stageForStatus } from "../domain/workflow.js";
+import { canTransition, allowedRolesByTransition, assignmentRoleByStatus, stageForStatus } from "../domain/workflow.js";
 import type { CaseStatus } from "../domain/workflow.js";
 import { notify } from "./notificationService.js";
 
@@ -82,19 +82,54 @@ export async function validateRequirement(caseId:string,requirementId:string,act
 }
 
 async function autoAssign(caseId:string,role:"GREFFE"|"MAGISTRAT",reason:string){
+  const current=await findCase(caseId);
+  if(!current) throw new Error("CASE_NOT_FOUND");
+
+  // Si le dossier est déjà confié à un agent actif du bon rôle, on conserve
+  // cette affectation : une nouvelle étape ne doit pas provoquer un
+  // rééquilibrage inutile.
+  if(current.assigned_to && current.assigned_role===role){
+    const activeCurrent=await pool.query(
+      "SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",
+      [current.assigned_to,role]
+    );
+    if(activeCurrent.rowCount) return current;
+  }
+
   const r=await pool.query(`SELECT u.id,u.full_name,
     COUNT(c.id) FILTER (WHERE c.status NOT IN ('ARCHIVE') AND c.assigned_to=u.id)::int AS workload
     FROM users u LEFT JOIN cases c ON c.assigned_to=u.id
-    WHERE u.role=$1 AND u.active=true GROUP BY u.id,u.full_name ORDER BY workload ASC,u.created_at ASC LIMIT 1`,[role]);
+    WHERE u.role=$1 AND u.active=true
+    GROUP BY u.id,u.full_name
+    ORDER BY workload ASC,u.created_at ASC
+    LIMIT 1`,[role]);
   const target=r.rows[0];
-  if(!target) return null;
+  if(!target) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
+
   const updated=await assignCase(caseId,target.id,role);
+  if(!updated) throw new Error("CASE_NOT_FOUND");
   await pool.query(`INSERT INTO case_assignments(case_id,assigned_to,assigned_role,assignment_type,reason)
     VALUES($1,$2,$3,'AUTO',$4)`,[caseId,target.id,role,reason]);
   await writeAudit({caseId,action:"CASE_AUTO_ASSIGNED",actorRole:"SYSTEM",metadata:{assignedTo:target.id,assignedRole:role,workloadBefore:Number(target.workload),reason}});
   const c=await findCase(caseId);
   if(c) await notify({userId:target.id,caseId,channel:"IN_APP",subject:"Nouveau dossier affecté",body:`Le dossier ${c.reference} vous est affecté à l'étape ${stageForStatus[c.status as CaseStatus]}.`});
   return updated;
+}
+
+async function ensureAutoAssignmentTarget(caseId:string,role:"GREFFE"|"MAGISTRAT"){
+  const current=await findCase(caseId);
+  if(current?.assigned_to && current.assigned_role===role){
+    const activeCurrent=await pool.query(
+      "SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",
+      [current.assigned_to,role]
+    );
+    if(activeCurrent.rowCount) return;
+  }
+  const available=await pool.query(
+    "SELECT id FROM users WHERE role=$1 AND active=true LIMIT 1",
+    [role]
+  );
+  if(!available.rowCount) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
 }
 
 async function setDueDate(caseId:string,status:CaseStatus){
@@ -113,11 +148,12 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   const req=await requiredState(input.id);
   if(input.next==="SOUMIS" && Number(req.required_count)>Number(req.received_count)) throw new Error("REQUIRED_DOCUMENTS_MISSING");
   if(input.next==="COMPLET" && Number(req.required_count)>Number(req.validated_count)) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
+  const assignmentRole=assignmentRoleByStatus[input.next];
+  if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole);
   const updated=await updateCaseStatus(input.id,input.next);
   await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus[input.next],requirements:req}});
   await setDueDate(input.id,input.next);
-  if(input.next==="SOUMIS") await autoAssign(input.id,"GREFFE","Soumission du dossier");
-  if(input.next==="ENROLEMENT") await autoAssign(input.id,"MAGISTRAT","Enrôlement après contrôle");
+  if(assignmentRole) await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
   return updated;
 }
 
