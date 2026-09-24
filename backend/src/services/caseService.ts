@@ -212,6 +212,57 @@ async function setDueDate(caseId:string,status:CaseStatus){
   if(hours>0) await pool.query("UPDATE cases SET due_at=CURRENT_TIMESTAMP + ($2 || ' hours')::interval WHERE id=$1",[caseId,String(hours)]);
 }
 
+async function ensureEnrollmentCreated(caseId:string,actorId:string){
+  const current=await findCase(caseId);
+  if(!current) throw new Error("CASE_NOT_FOUND");
+  if(current.status!=="COMPLET") throw new Error("ENROLLMENT_CASE_NOT_COMPLETE");
+  await ensurePaymentForEnrollment(caseId);
+
+  const existing=await pool.query(
+    "SELECT * FROM enrollments WHERE case_id=$1 FOR UPDATE",
+    [caseId]
+  );
+  if(existing.rowCount && existing.rows[0].enrollment_reference){
+    return existing.rows[0];
+  }
+
+  const year=new Date().getFullYear();
+  const reference=`ENR-${year}-${current.reference}`;
+  const r=await pool.query(
+    `INSERT INTO enrollments(case_id,enrollment_reference,enrolled_at,enrolled_by)
+     VALUES($1,$2,CURRENT_TIMESTAMP,$3)
+     ON CONFLICT(case_id) DO UPDATE SET
+       enrollment_reference=COALESCE(enrollments.enrollment_reference,EXCLUDED.enrollment_reference),
+       enrolled_at=COALESCE(enrollments.enrolled_at,EXCLUDED.enrolled_at),
+       enrolled_by=COALESCE(enrollments.enrolled_by,EXCLUDED.enrolled_by),
+       updated_at=CURRENT_TIMESTAMP
+     RETURNING *`,
+    [caseId,reference,actorId]
+  );
+  await writeAudit({
+    actorId,
+    caseId,
+    action:"CASE_ENROLLED",
+    metadata:{
+      enrollmentId:r.rows[0].id,
+      enrollmentReference:r.rows[0].enrollment_reference,
+      enrolledAt:r.rows[0].enrolled_at,
+      enrolledBy:actorId
+    }
+  });
+  return r.rows[0];
+}
+
+export async function getEnrollment(caseId:string){
+  const r=await pool.query(
+    `SELECT e.*,u.full_name AS enrolled_by_name
+     FROM enrollments e LEFT JOIN users u ON u.id=e.enrolled_by
+     WHERE e.case_id=$1`,
+    [caseId]
+  );
+  return r.rows[0]??null;
+}
+
 async function ensureDecisionExists(caseId:string){
   const r=await pool.query("SELECT id FROM decisions WHERE case_id=$1 LIMIT 1",[caseId]);
   if(!r.rowCount) throw new Error("DECISION_REQUIRED");
@@ -233,7 +284,10 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   const req=requirementStage?await requiredState(input.id,requirementStage):{required_count:0,received_count:0,validated_count:0};
   if(input.next==="SOUMIS" && !requiredDocumentsSatisfied(req,"SUBMIT")) throw new Error("REQUIRED_DOCUMENTS_MISSING");
   if(input.next==="COMPLET" && !requiredDocumentsSatisfied(req,"COMPLETE")) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
-  if(input.next==="ENROLEMENT") await ensurePaymentForEnrollment(input.id);
+  if(input.next==="ENROLEMENT"){
+    await ensureAutoAssignmentTarget(input.id,"MAGISTRAT");
+    await ensureEnrollmentCreated(input.id,input.actorId);
+  }
   if(input.next==="AUDIENCE") await ensureHearingExists(input.id);
   if(input.next==="DECISION_RENDUE") await ensureDecisionExists(input.id);
   const assignmentRole=assignmentRoleByStatus[input.next];
