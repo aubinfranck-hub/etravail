@@ -64,3 +64,14 @@
   .newHero h1{font-size:29px}
   .recentList article{min-width:430px}
 }
+.smsCard{margin-top:16px}
+.smsPrice{font-size:11px;font-weight:900;color:#80652f;background:#f7f0e2;border:1px solid #e7dbc3;padding:7px 10px;border-radius:999px;white-space:nowrap}
+.smsCardBody{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid #edf0f4}
+.smsCardBody b,.smsCardBody small{display:block}
+.smsCardBody small{font-size:10px;color:var(--muted);margin-top:4px}
+.smsCardBody button{white-space:nowrap}
+@media(max-width:560px){
+ .smsCardBody{display:grid}
+ .smsCardBody button{width:100%;min-height:46px}
+ .smsPrice{justify-self:start}
+}
