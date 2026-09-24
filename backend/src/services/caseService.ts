@@ -4,6 +4,7 @@ import { writeAudit } from "../repositories/auditRepository.js";
 import { canTransition, allowedRolesByTransition, assignmentRoleByStatus, stageForStatus } from "../domain/workflow.js";
 import type { CaseStatus } from "../domain/workflow.js";
 import { notify } from "./notificationService.js";
+import { ensurePaymentForEnrollment } from "./paymentService.js";
 
 const NATURES = ["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HARCELEMENT","ACCIDENT_TRAVAIL","AUTRE"] as const;
 
@@ -148,6 +149,7 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   const req=await requiredState(input.id);
   if(input.next==="SOUMIS" && Number(req.required_count)>Number(req.received_count)) throw new Error("REQUIRED_DOCUMENTS_MISSING");
   if(input.next==="COMPLET" && Number(req.required_count)>Number(req.validated_count)) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
+  if(input.next==="ENROLEMENT") await ensurePaymentForEnrollment(input.id);
   const assignmentRole=assignmentRoleByStatus[input.next];
   if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole);
   const updated=await updateCaseStatus(input.id,input.next);
