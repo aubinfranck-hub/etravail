@@ -112,7 +112,7 @@ test("actions are restricted to their workflow stage",()=>{
 test("assignment status mapping covers operational stages",()=>{
   assert.equal(assignmentRoleByStatus.SOUMIS,"GREFFE");
   assert.equal(assignmentRoleByStatus.ENROLEMENT,"AUDIENCES");
-  assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
+  assert.equal(assignmentRoleByStatus.NOTIFIE,"ARCHIVAGE");
 });
 
 test("submission requirements are scoped to the target workflow stage",()=>{
