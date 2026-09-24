@@ -328,3 +328,24 @@ CREATE TABLE IF NOT EXISTS sms_tracking_transactions (
 );
 CREATE INDEX IF NOT EXISTS idx_sms_tracking_transactions_case
   ON sms_tracking_transactions(case_id,created_at DESC);
+
+
+-- Procédure officielle Tribunal du Travail d'Abidjan — pièces obligatoires de SAISINE
+INSERT INTO workflow_requirements(status,nature_code,code,label,required,sort_order,active)
+SELECT 'SOUMIS',NULL,'PV_NON_CONCILIATION','Procès-verbal de non-conciliation',TRUE,10,TRUE
+WHERE NOT EXISTS (
+  SELECT 1 FROM workflow_requirements
+  WHERE status='SOUMIS' AND nature_code IS NULL AND code='PV_NON_CONCILIATION'
+);
+INSERT INTO workflow_requirements(status,nature_code,code,label,required,sort_order,active)
+SELECT 'SOUMIS',NULL,'REQUETE','Requête',TRUE,20,TRUE
+WHERE NOT EXISTS (
+  SELECT 1 FROM workflow_requirements
+  WHERE status='SOUMIS' AND nature_code IS NULL AND code='REQUETE'
+);
+INSERT INTO workflow_requirements(status,nature_code,code,label,required,sort_order,active)
+SELECT 'SOUMIS',NULL,'CNI','Carte nationale d''identité (CNI)',TRUE,30,TRUE
+WHERE NOT EXISTS (
+  SELECT 1 FROM workflow_requirements
+  WHERE status='SOUMIS' AND nature_code IS NULL AND code='CNI'
+);
