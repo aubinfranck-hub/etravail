@@ -53,11 +53,39 @@ export function normalizeNature(nature:string|undefined,title:string){
 
 async function syncCaseRequirements(caseId:string,natureCode:string,stage:string){
   const rules=await pool.query(
-    `SELECT id FROM workflow_requirements
-     WHERE status=$2 AND active=true AND (nature_code=$1 OR nature_code IS NULL)
-     ORDER BY sort_order ASC`,[natureCode,stage]);
+    `SELECT wr.id
+     FROM workflow_requirements wr
+     WHERE wr.status=$2 AND wr.active=true
+       AND (wr.nature_code=$1 OR wr.nature_code IS NULL)
+       AND (
+         NOT EXISTS (
+           SELECT 1 FROM workflow_requirement_rules rr
+           WHERE rr.requirement_id=wr.id AND rr.active=true
+         )
+         OR NOT EXISTS (
+           SELECT 1
+           FROM workflow_requirement_rules rr
+           WHERE rr.requirement_id=wr.id AND rr.active=true
+             AND NOT EXISTS (
+               SELECT 1 FROM case_answers ca
+               WHERE ca.case_id=$3 AND ca.question_id=rr.question_id
+                 AND (
+                   rr.operator='EXISTS'
+                   OR (rr.operator='EQ' AND ca.value = rr.expected_value)
+                   OR (rr.operator='NEQ' AND ca.value <> rr.expected_value)
+                   OR (rr.operator='IN' AND rr.expected_value ? (ca.value->>0))
+                   OR (rr.operator='NOT_IN' AND NOT (rr.expected_value ? (ca.value->>0)))
+                 )
+             )
+         )
+       )
+     ORDER BY wr.sort_order ASC`,[natureCode,stage,caseId]);
   for(const rule of rules.rows){
-    await pool.query(`INSERT INTO case_requirements(case_id,requirement_id) VALUES($1,$2) ON CONFLICT(case_id,requirement_id) DO NOTHING`,[caseId,rule.id]);
+    await pool.query(
+      `INSERT INTO case_requirements(case_id,requirement_id)
+       VALUES($1,$2) ON CONFLICT(case_id,requirement_id) DO NOTHING`,
+      [caseId,rule.id]
+    );
   }
 }
 
@@ -80,6 +108,39 @@ export async function openCase(input:{claimantId:string;title:string;actorId:str
   await writeAudit({actorId:input.actorId,caseId:item.id,action:"CASE_CREATED",actorRole:"CITOYEN",metadata:{reference,natureCode}});
   await writeAudit({actorId:input.actorId,caseId:item.id,action:"CASE_NATURE_CLASSIFIED",actorRole:"CITOYEN",metadata:{natureCode,source:input.natureCode?"USER":"RULE_ENGINE"}});
   return item;
+}
+
+export async function getWorkflowQuestions(caseId:string,status:string,natureCode:string){
+  const r=await pool.query(
+    `SELECT wq.id,wq.code,wq.label,wq.answer_type,wq.required,wq.sort_order,
+      ca.value AS answer
+     FROM workflow_questions wq
+     LEFT JOIN case_answers ca ON ca.question_id=wq.id AND ca.case_id=$1
+     WHERE wq.status=$2 AND wq.active=true
+       AND (wq.nature_code=$3 OR wq.nature_code IS NULL)
+     ORDER BY wq.sort_order,wq.label`,
+    [caseId,status,natureCode]
+  );
+  return r.rows;
+}
+
+export async function saveCaseAnswer(caseId:string,questionId:string,value:unknown,actorId:string){
+  const question=await pool.query(
+    `SELECT id,answer_type,required FROM workflow_questions
+     WHERE id=$1 AND active=true LIMIT 1`,[questionId]);
+  if(!question.rowCount) throw new Error("QUESTION_NOT_FOUND");
+  if(value===undefined||value===null) throw new Error("ANSWER_REQUIRED");
+  const r=await pool.query(
+    `INSERT INTO case_answers(case_id,question_id,value,answered_by)
+     VALUES($1,$2,$3::jsonb,$4)
+     ON CONFLICT(case_id,question_id) DO UPDATE SET
+       value=EXCLUDED.value,answered_by=EXCLUDED.answered_by,
+       answered_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP
+     RETURNING *`,
+    [caseId,questionId,JSON.stringify(value),actorId]
+  );
+  await writeAudit({actorId,caseId,action:"CASE_QUESTION_ANSWERED",metadata:{questionId,value}});
+  return r.rows[0];
 }
 
 export function requiredDocumentsSatisfied(state:{required_count:number;received_count:number;validated_count:number},mode:"SUBMIT"|"COMPLETE"){
