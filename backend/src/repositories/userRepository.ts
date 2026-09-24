@@ -27,7 +27,10 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
 }
 
 export async function listUsers() {
-  const result = await pool.query("SELECT id,email,role,full_name,phone,active,created_at FROM users ORDER BY created_at DESC");
+  const result = await pool.query(`SELECT u.id,u.email,u.role,u.full_name,u.phone,u.active,u.created_at,
+    COALESCE(array_agg(usa.stage_key ORDER BY usa.stage_key) FILTER (WHERE usa.stage_key IS NOT NULL),'{}') AS stage_access
+    FROM users u LEFT JOIN user_stage_access usa ON usa.user_id=u.id
+    GROUP BY u.id ORDER BY u.created_at DESC`);
   return result.rows;
 }
 
