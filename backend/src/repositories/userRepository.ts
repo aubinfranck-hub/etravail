@@ -4,7 +4,7 @@ export interface UserRecord {
   id: string;
   email: string;
   password_hash: string | null;
-  role: "CITOYEN" | "GREFFE" | "MAGISTRAT" | "ADMIN";
+  role: "CITOYEN" | "SAISINE" | "GREFFE" | "CONTROLE" | "ENROLEMENT" | "AUDIENCES" | "MAGISTRAT" | "NOTIFICATION" | "ARCHIVAGE" | "ADMIN";
   full_name: string | null;
   phone: string | null;
   active: boolean;
