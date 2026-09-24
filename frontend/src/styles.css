@@ -78,8 +78,8 @@
 .citizenWizard{margin-top:18px;border:1px solid #e5e7eb;background:#fff;border-radius:18px;padding:22px}
 .wizardHeader{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
 .wizardHeader h2{margin:4px 0 6px}.wizardHeader p{margin:0;color:#667085;max-width:680px}.wizardHeader>strong{font-size:15px;background:#f5f1e8;padding:8px 12px;border-radius:999px}
-.wizardRail{display:flex;gap:6px;overflow:auto;margin:22px 0;padding-bottom:5px}
-.wizardStep{min-width:92px;display:flex;flex-direction:column;gap:7px;color:#98a2b3;font-size:11px}
+.wizardRail{display:flex;gap:8px;overflow-x:auto;overflow-y:hidden;margin:22px 0;padding:0 4px 5px;scroll-behavior:smooth;scrollbar-width:none;-ms-overflow-style:none;overscroll-behavior-x:contain}.wizardRail::-webkit-scrollbar{display:none}
+.wizardStep{flex:0 0 92px;min-width:92px;display:flex;flex-direction:column;gap:7px;color:#98a2b3;font-size:11px}
 .wizardStep span{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:1px solid #d0d5dd;background:#fff}
 .wizardStep b{font-size:11px;white-space:nowrap}.wizardStep.active{color:#172033}.wizardStep.active span,.wizardStep.done span{background:#172033;color:#fff;border-color:#172033}
 .wizardReference{background:#f8fafc;border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:13px}
