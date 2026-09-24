@@ -38,7 +38,7 @@ test("citizen can submit but cannot jump to a decision",()=>{
   assert.equal(canTransition("BROUILLON","DECISION_RENDUE"),false);
 });
 
-test("enrollment requires a magistrate assignment",()=>{
+test("enrollment requires a registry assignment",()=>{
   assert.equal(assignmentRoleByStatus.ENROLEMENT,"GREFFE");
   assert.equal(stageForStatus.ENROLEMENT,"ENROLEMENT");
 });
