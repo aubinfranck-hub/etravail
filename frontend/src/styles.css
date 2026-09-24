@@ -102,3 +102,6 @@
 .presentationHighlights{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:18px}.presentationHighlights article{padding:18px;border-top:3px solid #b28a3b;background:#f8f9fa;border-radius:0 0 12px 12px}.presentationHighlights p{margin:7px 0 0;color:#666;line-height:1.5;font-size:13px}
 @media(max-width:900px){.presentationSteps,.presentationHighlights{grid-template-columns:1fr 1fr}.presentationIntro{align-items:flex-start}}
 @media(max-width:560px){.presentationSteps,.presentationHighlights{grid-template-columns:1fr}.presentationIntro{padding:18px}.presentationBadge{min-width:70px;height:70px;font-size:22px}}
+
+.stageChecks{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 0}.stageChecks label{display:flex;gap:8px;align-items:center;padding:11px 12px;border:1px solid #e2e5e8;border-radius:10px;background:#fff;font-size:13px}.stageChecks input{accent-color:#17324d}
+@media(max-width:900px){.stageChecks{grid-template-columns:repeat(2,1fr)}}@media(max-width:560px){.stageChecks{grid-template-columns:1fr}}
