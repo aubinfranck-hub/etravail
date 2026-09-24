@@ -45,5 +45,7 @@ export function updateAdminPermission(input:{role:string;permission:string;enabl
 export async function getCaseQuestions(id:string){return api(`/cases/${id}/questions`);}
 export async function saveCaseQuestion(id:string,questionId:string,value:unknown){return api(`/cases/${id}/questions/${questionId}`,{method:"PUT",body:JSON.stringify({value})});}
 
-export async function getSmsAccount(){return api("/notifications/sms/account");}
-export async function setSmsOption(enabled:boolean){return api("/notifications/sms/option",{method:"PATCH",body:JSON.stringify({enabled})});}
+export async function getCaseSmsTracking(caseId:string){return api(`/cases/${caseId}/sms-tracking`);}
+export async function purchaseCaseSmsTracking(caseId:string){return api(`/cases/${caseId}/sms-tracking/purchase`,{method:"POST"});}
+export async function setCaseSmsTrackingOption(caseId:string,enabled:boolean){return api(`/cases/${caseId}/sms-tracking/option`,{method:"PATCH",body:JSON.stringify({enabled})});}
+export async function validateCaseSmsPayment(caseId:string,paymentReference?:string){return api(`/admin/cases/${caseId}/sms-tracking/validate`,{method:"POST",body:JSON.stringify({paymentReference})});}
