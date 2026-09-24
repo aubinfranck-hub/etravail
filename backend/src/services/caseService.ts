@@ -3,7 +3,7 @@ import { createCase, findCase, listCases, updateCaseStatus, assignCase } from ".
 import { writeAudit } from "../repositories/auditRepository.js";
 import { canTransition, allowedRolesByTransition, assignmentRoleByStatus, stageForStatus } from "../domain/workflow.js";
 import type { CaseStatus } from "../domain/workflow.js";
-import { notify } from "./notificationService.js";
+import { notify, notifyCaseParticipants } from "./notificationService.js";
 import { ensurePaymentForEnrollment } from "./paymentService.js";
 import { sendTrackingSms, type TrackingSmsEvent } from "./smsService.js";
 
@@ -296,6 +296,14 @@ export async function validateRequirement(caseId:string,requirementId:string,act
     [requirementId,caseId,actorId,status,current.document_id,cleanReason]
   );
   await writeAudit({actorId,caseId,action:valid?"DOCUMENT_VALIDATED":"DOCUMENT_REJECTED",metadata:{requirementId,status,documentId:current.document_id,reason:cleanReason}});
+  const caseItem=await findCase(caseId);
+  if(caseItem){
+    await notifyCaseParticipants({
+      caseId,
+      subject:valid?"Pièce validée":"Pièce rejetée",
+      body:valid?`La pièce requise du dossier ${caseItem.reference} a été validée.`:`La pièce requise du dossier ${caseItem.reference} a été rejetée.${cleanReason?` Motif : ${cleanReason}`:""}`
+    });
+  }
   return r.rows[0];
 }
 
@@ -460,6 +468,30 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(input.next==="ENROLEMENT") await ensureEnrollmentCreated(input.id,input.actorId);
   await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus[input.next],requirements:req}});
   await setDueDate(input.id,input.next);
+  const stageNotificationByStatus:Partial<Record<CaseStatus,string>>={
+    SOUMIS:"GREFFE",
+    RECU_GREFFE:"GREFFE",
+    A_VERIFIER:"CONTROLE",
+    COMPLET:"ENROLEMENT",
+    INCOMPLET:"SAISINE",
+    ENROLEMENT:"AUDIENCES",
+    CONCILIATION:"AUDIENCES",
+    CONCILIE:"NOTIFICATION",
+    CONCILIATION_ECHEC:"AUDIENCES",
+    AUDIENCE_PLANIFIEE:"AUDIENCES",
+    AUDIENCE:"AUDIENCES",
+    DECISION_RENDUE:"NOTIFICATION",
+    NOTIFIE:"ARCHIVAGE",
+    ARCHIVE:"ARCHIVAGE"
+  };
+  const targetStage=stageNotificationByStatus[input.next];
+  if(targetStage){
+    const labels:Partial<Record<CaseStatus,string>>={
+      SOUMIS:"Nouveau dossier soumis",RECU_GREFFE:"Dossier reçu au Greffe",A_VERIFIER:"Dossier à contrôler",COMPLET:"Dossier complet",INCOMPLET:"Dossier incomplet",ENROLEMENT:"Dossier à enrôler",CONCILIATION:"Conciliation",CONCILIE:"Conciliation réussie",CONCILIATION_ECHEC:"Conciliation échouée",AUDIENCE_PLANIFIEE:"Audience programmée",AUDIENCE:"Audience en cours",DECISION_RENDUE:"Décision rendue",NOTIFIE:"Décision à notifier",ARCHIVE:"Dossier archivé"
+    };
+    const c=await findCase(input.id);
+    if(c) await notifyCaseParticipants({caseId:input.id,stage:targetStage,subject:labels[input.next]??"Mise à jour du dossier",body:`Le dossier ${c.reference} est passé au statut ${input.next}.`});
+  }
   if(assignmentRole) await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
   const trackingEventByStatus:Partial<Record<CaseStatus,TrackingSmsEvent>>={
     SOUMIS:"CASE_REGISTERED",
