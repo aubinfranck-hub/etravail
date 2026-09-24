@@ -215,7 +215,7 @@ async function setDueDate(caseId:string,status:CaseStatus){
 async function ensureEnrollmentCreated(caseId:string,actorId:string){
   const current=await findCase(caseId);
   if(!current) throw new Error("CASE_NOT_FOUND");
-  if(current.status!=="COMPLET") throw new Error("ENROLLMENT_CASE_NOT_COMPLETE");
+  if(!["COMPLET","ENROLEMENT"].includes(current.status)) throw new Error("ENROLLMENT_CASE_NOT_COMPLETE");
 
   const existing=await pool.query(
     "SELECT * FROM enrollments WHERE case_id=$1 FOR UPDATE",
