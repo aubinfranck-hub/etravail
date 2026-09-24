@@ -1,4 +1,4 @@
-import React,{useEffect,useMemo,useState} from "react";
+import React,{useEffect,useMemo,useRef,useState} from "react";
 import {createRoot} from "react-dom/client";
 import {getDashboard,getCases,getCalendar,getNotifications,login,searchDocuments,createCase,updateCaseBasics,uploadDocument,transitionCase,getCaseParties,addParty,getCaseDocuments,getCaseRequirements,validateCaseRequirement,getHearings,createHearing,getConciliations,createConciliation,updateConciliation,getDecisions,createDecision,getAudit,getUsers,updateUserAccess,assignCase,searchLegalSources,legalAssist,downloadDocument,getPayment,setupPayment,registerPaymentValidationCode,verifyPayment,getWorkflowRequirements,createWorkflowRequirement,updateWorkflowRequirement,getAdminPermissions,updateAdminPermission,createStaffAccount,getCaseQuestions,saveCaseQuestion,getCaseSmsTracking,purchaseCaseSmsTracking,validateCaseSmsPayment,setCaseSmsTrackingOption} from "./api";
 import "./styles.css";
@@ -31,6 +31,8 @@ function Login({onLogin}:{onLogin:()=>void}){const[e,setE]=useState("");const[p,
 function CitizenCaseWizard({user,onDone,onError}:{user:any;onDone:(c:any)=>void;onError:(e:string)=>void}){
  const steps=["Création","Identité","Employeur","Nature","Questions","Pièces","Récapitulatif","Confirmation","Soumission"];
  const[step,setStep]=useState(0),[caseItem,setCaseItem]=useState<any>(null),[busy,setBusy]=useState(false),[title,setTitle]=useState(""),[nature,setNature]=useState("AUTRE");
+ const railRef=useRef<HTMLDivElement|null>(null);
+ useEffect(()=>{const active=railRef.current?.querySelector(".wizardStep.active") as HTMLElement|null; active?.scrollIntoView({behavior:"smooth",inline:"center",block:"nearest"});},[step]);
  const[identity,setIdentity]=useState({fullName:user.full_name||"",contact:user.phone||""}),[employer,setEmployer]=useState({fullName:"",contact:""});
  const[questions,setQuestions]=useState<any[]>([]),[requirements,setRequirements]=useState<any[]>([]),[fileMap,setFileMap]=useState<Record<string,File|null>>({}),[confirmed,setConfirmed]=useState(false),[error,setError]=useState("");
  async function run(fn:()=>Promise<any>){try{setBusy(true);setError("");return await fn()}catch(e:any){setError(e.message);onError(e.message);throw e}finally{setBusy(false)}}
@@ -48,7 +50,7 @@ function CitizenCaseWizard({user,onDone,onError}:{user:any;onDone:(c:any)=>void;
  const natureOptions=[["AUTRE","Autre"],["LICENCIEMENT","Licenciement"],["SALAIRE_IMPAYE","Salaire impayé"],["CONGES","Congés"],["RUPTURE_CONTRAT","Rupture du contrat"],["HARCELEMENT","Harcèlement"],["ACCIDENT_TRAVAIL","Accident du travail"]];
  return <section id="create" className="citizenWizard panel">
   <div className="wizardHeader"><div><span className="eyebrow dark">SAISINE EN LIGNE</span><h2>Créer un dossier</h2><p>Constituez votre dossier étape par étape. Vos informations sont conservées pendant la préparation.</p></div><strong>{Math.min(step+1,steps.length)}/{steps.length}</strong></div>
-  <div className="wizardRail">{steps.map((s,i)=><div key={s} className={i<step?"wizardStep done":i===step?"wizardStep active":"wizardStep"}><span>{i<step?"✓":i+1}</span><b>{s}</b></div>)}</div>
+  <div ref={railRef} className="wizardRail">{steps.map((s,i)=><div key={s} className={i<step?"wizardStep done":i===step?"wizardStep active":"wizardStep"}><span>{i<step?"✓":i+1}</span><b>{s}</b></div>)}</div>
   {caseItem&&<div className="wizardReference">Dossier brouillon : <b>{caseItem.reference}</b></div>}
   {step===0&&<div className="wizardBody"><h3>1. Création</h3><p>Commencez par donner un titre clair à votre demande.</p><label>Objet de la demande *<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="Ex. Contestation de licenciement"/></label></div>}
   {step===1&&<div className="wizardBody"><h3>2. Identité du demandeur</h3><p>Vérifiez les informations utilisées pour vous identifier dans le dossier.</p><label>Nom complet *<input value={identity.fullName} onChange={e=>setIdentity({...identity,fullName:e.target.value})}/></label><label>Téléphone / contact *<input value={identity.contact} onChange={e=>setIdentity({...identity,contact:e.target.value})}/></label></div>}
