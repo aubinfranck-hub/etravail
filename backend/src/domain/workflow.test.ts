@@ -43,8 +43,8 @@ test("enrollment requires a registry assignment",()=>{
   assert.equal(stageForStatus.ENROLEMENT,"ENROLEMENT");
 });
 
-test("notification returns responsibility to the registry",()=>{
-  assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
+test("notification returns responsibility to the archive service",()=>{
+  assert.equal(assignmentRoleByStatus.NOTIFIE,"ARCHIVAGE");
   assert.equal(stageForStatus.NOTIFIE,"NOTIFICATION");
   assert.equal(stageForStatus.CONCILIATION,"AUDIENCES");
   assert.equal(stageForStatus.AUDIENCE,"AUDIENCES");
@@ -111,7 +111,7 @@ test("actions are restricted to their workflow stage",()=>{
 
 test("assignment status mapping covers operational stages",()=>{
   assert.equal(assignmentRoleByStatus.SOUMIS,"GREFFE");
-  assert.equal(assignmentRoleByStatus.ENROLEMENT,"GREFFE");
+  assert.equal(assignmentRoleByStatus.ENROLEMENT,"AUDIENCES");
   assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
 });
 
