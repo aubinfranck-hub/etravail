@@ -231,3 +231,61 @@ CREATE TABLE IF NOT EXISTS role_permissions (
   PRIMARY KEY(role,permission)
 );
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role,enabled);
+
+
+-- e-Travail dynamic request questionnaire and conditional requirements v1
+CREATE TABLE IF NOT EXISTS workflow_questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  status VARCHAR(40) NOT NULL,
+  nature_code VARCHAR(60),
+  code VARCHAR(100) NOT NULL,
+  label VARCHAR(500) NOT NULL,
+  answer_type VARCHAR(30) NOT NULL DEFAULT 'TEXT'
+    CHECK(answer_type IN ('TEXT','LONG_TEXT','BOOLEAN','SINGLE_CHOICE','MULTIPLE_CHOICE','NUMBER','DATE')),
+  required BOOLEAN NOT NULL DEFAULT FALSE,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE(status,nature_code,code)
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_questions_lookup
+  ON workflow_questions(status,nature_code,active);
+
+CREATE TABLE IF NOT EXISTS workflow_question_options (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  question_id UUID NOT NULL REFERENCES workflow_questions(id) ON DELETE CASCADE,
+  code VARCHAR(100) NOT NULL,
+  label VARCHAR(255) NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE(question_id,code)
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_question_options_question
+  ON workflow_question_options(question_id,active,sort_order);
+
+CREATE TABLE IF NOT EXISTS case_answers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  question_id UUID NOT NULL REFERENCES workflow_questions(id),
+  value JSONB NOT NULL,
+  answered_by UUID REFERENCES users(id),
+  answered_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(case_id,question_id)
+);
+CREATE INDEX IF NOT EXISTS idx_case_answers_case ON case_answers(case_id);
+CREATE INDEX IF NOT EXISTS idx_case_answers_question ON case_answers(question_id);
+
+CREATE TABLE IF NOT EXISTS workflow_requirement_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  requirement_id UUID NOT NULL REFERENCES workflow_requirements(id) ON DELETE CASCADE,
+  question_id UUID NOT NULL REFERENCES workflow_questions(id) ON DELETE CASCADE,
+  operator VARCHAR(20) NOT NULL
+    CHECK(operator IN ('EQ','NEQ','IN','NOT_IN','EXISTS','NOT_EXISTS')),
+  expected_value JSONB,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  UNIQUE(requirement_id,question_id,operator)
+);
+CREATE INDEX IF NOT EXISTS idx_workflow_requirement_rules_requirement
+  ON workflow_requirement_rules(requirement_id,active);
+CREATE INDEX IF NOT EXISTS idx_workflow_requirement_rules_question
+  ON workflow_requirement_rules(question_id,active);
