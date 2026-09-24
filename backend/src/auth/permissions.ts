@@ -33,6 +33,7 @@ export async function listPermissions(){
 }
 
 export async function setPermission(input:{role:Role;permission:string;enabled:boolean;actorId:string}){
+  if(input.role==="ADMIN"&&input.permission==="admin:manage"&&!input.enabled) throw new Error("ADMIN_MANAGE_REQUIRED");
   if(!permissions[input.role]) throw new Error("INVALID_ROLE");
   if(!permissions[input.role].includes(input.permission)) throw new Error("INVALID_PERMISSION");
   const r=await pool.query(`INSERT INTO role_permissions(role,permission,enabled,updated_at)
