@@ -180,6 +180,7 @@ CREATE TABLE IF NOT EXISTS case_requirements (
 );
 CREATE INDEX IF NOT EXISTS idx_case_requirements_case ON case_requirements(case_id);
 CREATE INDEX IF NOT EXISTS idx_case_requirements_status ON case_requirements(status);
+ALTER TABLE case_requirements ADD COLUMN IF NOT EXISTS applicable BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE INDEX IF NOT EXISTS idx_case_requirements_applicable ON case_requirements(case_id,applicable);
 
 CREATE TABLE IF NOT EXISTS case_requirement_events (
