@@ -8,7 +8,7 @@ test("workflow archives only from notification",()=>assert.equal(canTransition("
 
 
 test("automatic assignment routes submitted cases to the registry",()=>assert.equal(assignmentRoleByStatus.SOUMIS,"GREFFE"));
-test("automatic assignment routes enrollment to magistrate",()=>assert.equal(assignmentRoleByStatus.ENROLEMENT,"MAGISTRAT"));
+test("automatic assignment routes enrollment to the registry",()=>assert.equal(assignmentRoleByStatus.ENROLEMENT,"GREFFE"));
 test("automatic assignment returns the registry after notification",()=>assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE"));
 
 
@@ -39,13 +39,16 @@ test("citizen can submit but cannot jump to a decision",()=>{
 });
 
 test("enrollment requires a magistrate assignment",()=>{
-  assert.equal(assignmentRoleByStatus.ENROLEMENT,"MAGISTRAT");
-  assert.equal(stageForStatus.ENROLEMENT,"GREFFE");
+  assert.equal(assignmentRoleByStatus.ENROLEMENT,"GREFFE");
+  assert.equal(stageForStatus.ENROLEMENT,"ENROLEMENT");
 });
 
 test("notification returns responsibility to the registry",()=>{
   assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
   assert.equal(stageForStatus.NOTIFIE,"NOTIFICATION");
+  assert.equal(stageForStatus.CONCILIATION,"AUDIENCES");
+  assert.equal(stageForStatus.AUDIENCE,"AUDIENCES");
+  assert.equal(stageForStatus.DECISION_RENDUE,"DECISIONS");
 });
 
 import {classifyNature,normalizeNature,requiredDocumentsSatisfied,isEnrollmentLocked} from "../services/caseService.js";
