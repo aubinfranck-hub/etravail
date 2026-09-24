@@ -122,6 +122,22 @@ export async function openCase(input:{claimantId:string;title:string;actorId:str
   return item;
 }
 
+export async function updateCaseBasics(caseId:string,input:{title?:string;natureCode?:string},actorId:string){
+  const current=await findCase(caseId);
+  if(!current) throw new Error("CASE_NOT_FOUND");
+  if(current.status!=="BROUILLON") throw new Error("CASE_ENROLLMENT_LOCKED");
+  const title=String(input.title??current.title).trim();
+  if(!title) throw new Error("TITLE_REQUIRED");
+  const natureCode=normalizeNature(input.natureCode,current.title);
+  const r=await pool.query(
+    `UPDATE cases SET title=$2,nature_code=$3,updated_at=CURRENT_TIMESTAMP WHERE id=$1 RETURNING *`,
+    [caseId,title,natureCode]
+  );
+  await syncCaseRequirements(caseId,natureCode,"SOUMIS");
+  await writeAudit({actorId,caseId,action:"CASE_BASICS_UPDATED",metadata:{title,natureCode}});
+  return r.rows[0];
+}
+
 export async function getWorkflowQuestions(caseId:string,status:string,natureCode:string){
   const r=await pool.query(
     `SELECT wq.id,wq.code,wq.label,wq.answer_type,wq.required,wq.sort_order,
