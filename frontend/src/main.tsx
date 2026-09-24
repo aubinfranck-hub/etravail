@@ -87,6 +87,7 @@ function CaseDetail({c,userRole,onClose,onRefresh,onError}:{c:Case;userRole:stri
 }
 
 function App(){
+ useEffect(()=>{const onExpired=()=>{localStorage.removeItem("etravail_token");localStorage.removeItem("etravail_user");setReady(false);setSelected(null);};window.addEventListener("etravail-auth-expired",onExpired);return()=>window.removeEventListener("etravail-auth-expired",onExpired)},[]);
  const[ready,setReady]=useState(!!localStorage.getItem("etravail_token"));
  const[dashboard,setDashboard]=useState<any>(null),[cases,setCases]=useState<Case[]>([]),[calendar,setCalendar]=useState<any[]>([]),[notifications,setNotifications]=useState<any[]>([]),[query,setQuery]=useState(""),[results,setResults]=useState<any[]>([]),[legalQuery,setLegalQuery]=useState(""),[legalResults,setLegalResults]=useState<any[]>([]),[aiQuestion,setAiQuestion]=useState(""),[aiAnswer,setAiAnswer]=useState<any>(null),[error,setError]=useState(""),[selected,setSelected]=useState<Case|null>(null),[busy,setBusy]=useState(false),[users,setUsers]=useState<any[]>([]),[requirementsAdmin,setRequirementsAdmin]=useState<any[]>([]),[permissionsAdmin,setPermissionsAdmin]=useState<any[]>([]),[newRequirement,setNewRequirement]=useState({status:"SOUMIS",natureCode:"AUTRE",code:"",label:"",required:true,deadlineHours:48,sortOrder:10}); const[staffForm,setStaffForm]=useState({email:"",password:"",fullName:"",phone:"",role:"GREFFE",stages:["GREFFE"]});
  const user=JSON.parse(localStorage.getItem("etravail_user")||'{"role":"VISITEUR"}'); const[stageFilter,setStageFilter]=useState<string|null>(null);
