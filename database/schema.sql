@@ -196,3 +196,13 @@ CREATE TABLE IF NOT EXISTS case_assignments (
 );
 CREATE INDEX IF NOT EXISTS idx_case_assignments_case ON case_assignments(case_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_case_assignments_user ON case_assignments(assigned_to,created_at DESC);
+
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  role VARCHAR(30) NOT NULL CHECK (role IN ('CITOYEN','GREFFE','MAGISTRAT','ADMIN')),
+  permission VARCHAR(100) NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(role,permission)
+);
+CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role,enabled);
