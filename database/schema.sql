@@ -61,6 +61,9 @@ CREATE INDEX IF NOT EXISTS idx_cases_status ON cases(status);
 CREATE TABLE IF NOT EXISTS enrollments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   case_id UUID NOT NULL UNIQUE REFERENCES cases(id) ON DELETE CASCADE,
+  enrollment_reference VARCHAR(120) UNIQUE,
+  enrolled_at TIMESTAMPTZ,
+  enrolled_by UUID REFERENCES users(id),
   fee_amount NUMERIC(14,2),
   currency VARCHAR(10) NOT NULL DEFAULT 'XOF',
   payment_status VARCHAR(30) NOT NULL DEFAULT 'A_PAYER'
@@ -73,6 +76,11 @@ CREATE TABLE IF NOT EXISTS enrollments (
 );
 CREATE INDEX IF NOT EXISTS idx_enrollments_payment_status ON enrollments(payment_status);
 ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS exemption_reason TEXT;
+ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS enrollment_reference VARCHAR(120);
+ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS enrolled_at TIMESTAMPTZ;
+ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS enrolled_by UUID REFERENCES users(id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_enrollments_reference ON enrollments(enrollment_reference) WHERE enrollment_reference IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_enrollments_enrolled_at ON enrollments(enrolled_at DESC);
 
 CREATE TABLE IF NOT EXISTS payment_validation_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
