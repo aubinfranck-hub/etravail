@@ -495,8 +495,9 @@ export async function reassignCasesFromUser(userId:string,actorId:string){
       `SELECT u.id,u.full_name,COUNT(c.id) FILTER (WHERE c.status<>'ARCHIVE' AND c.assigned_to=u.id)::int AS workload
        FROM users u LEFT JOIN cases c ON c.assigned_to=u.id
        WHERE u.role=$1 AND u.active=true AND u.id<>$2
+         AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$3)
        GROUP BY u.id,u.full_name ORDER BY workload ASC,u.created_at ASC LIMIT 1`,
-      [role,userId]
+      [role,userId,stageForStatus[item.status as CaseStatus]]
     );
     if(!target.rowCount) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
     const selected=target.rows[0];
