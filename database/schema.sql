@@ -292,3 +292,39 @@ CREATE INDEX IF NOT EXISTS idx_workflow_requirement_rules_requirement
   ON workflow_requirement_rules(requirement_id,active);
 CREATE INDEX IF NOT EXISTS idx_workflow_requirement_rules_question
   ON workflow_requirement_rules(question_id,active);
+
+
+-- e-Travail SMS tracking: paid package scoped to one case
+CREATE TABLE IF NOT EXISTS case_sms_tracking (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_id UUID NOT NULL UNIQUE REFERENCES cases(id) ON DELETE CASCADE,
+  enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  package_code VARCHAR(50) NOT NULL DEFAULT 'SUIVI_DOSSIER',
+  package_price_xof NUMERIC(14,2) NOT NULL DEFAULT 500,
+  sms_quota INTEGER NOT NULL DEFAULT 10 CHECK(sms_quota>=0),
+  sms_used INTEGER NOT NULL DEFAULT 0 CHECK(sms_used>=0),
+  payment_status VARCHAR(20) NOT NULL DEFAULT 'A_PAYER'
+    CHECK(payment_status IN ('A_PAYER','PAYE','ANNULE','EXPIRE')),
+  payment_reference VARCHAR(120),
+  activated_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_case_sms_tracking_enabled
+  ON case_sms_tracking(enabled,payment_status);
+
+CREATE TABLE IF NOT EXISTS sms_tracking_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  type VARCHAR(30) NOT NULL CHECK(type IN ('PURCHASE','DEBIT','REFUND')),
+  amount_xof NUMERIC(14,2) NOT NULL DEFAULT 0 CHECK(amount_xof>=0),
+  quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity>=0),
+  event_code VARCHAR(60),
+  status VARCHAR(30) NOT NULL DEFAULT 'PENDING',
+  provider_reference VARCHAR(120),
+  reference VARCHAR(120),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_sms_tracking_transactions_case
+  ON sms_tracking_transactions(case_id,created_at DESC);
