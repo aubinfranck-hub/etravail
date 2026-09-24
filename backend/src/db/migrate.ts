@@ -70,6 +70,49 @@ async function seedWorkflowRequirements(){
   console.log("Workflow requirements seeded");
 }
 
+async function seedDynamicQuestionnaire(){
+  const questions=[
+    ["SAISINE","LICENCIEMENT_ECRIT","Le licenciement a-t-il été notifié par écrit ?","BOOLEAN",true,10],
+    ["SAISINE","RECLAMATION_EMPLOYEUR","Avez-vous déjà adressé une réclamation à l'employeur concernant ce litige ?","BOOLEAN",true,20],
+    ["SAISINE","SALAIRE_IMPAYE_PERIODE","La période de salaire impayé est-elle précisément identifiable ?","BOOLEAN",true,30]
+  ];
+  for(const [status,code,label,type,required,sort] of questions){
+    await pool.query(
+      `INSERT INTO workflow_questions(status,nature_code,code,label,answer_type,required,sort_order)
+       VALUES($1,NULL,$2,$3,$4,$5,$6)
+       ON CONFLICT(status,nature_code,code) DO UPDATE SET
+         label=EXCLUDED.label,answer_type=EXCLUDED.answer_type,required=EXCLUDED.required,sort_order=EXCLUDED.sort_order,active=true`,
+      [status,code,label,type,required,sort]
+    );
+  }
+
+  const conditionalRequirements=[
+    ["LICENCIEMENT","LETTRE_LICENCIEMENT","Lettre de licenciement",true,48,50,"LICENCIEMENT_ECRIT","EQ",true],
+    ["LICENCIEMENT","PREUVE_RECLAMATION","Preuve de réclamation adressée à l'employeur",false,48,60,"RECLAMATION_EMPLOYEUR","EQ",true]
+  ];
+  for(const [nature,code,label,required,hours,order,qcode,operator,expected] of conditionalRequirements){
+    await pool.query(
+      `INSERT INTO workflow_requirements(status,nature_code,code,label,required,deadline_hours,sort_order)
+       VALUES('SOUMIS',$1,$2,$3,$4,$5,$6)
+       ON CONFLICT(status,nature_code,code) DO UPDATE SET
+         label=EXCLUDED.label,required=EXCLUDED.required,deadline_hours=EXCLUDED.deadline_hours,
+         sort_order=EXCLUDED.sort_order,active=true`,
+      [nature,code,label,required,hours,order]
+    );
+    await pool.query(
+      `INSERT INTO workflow_requirement_rules(requirement_id,question_id,operator,expected_value,active)
+       SELECT wr.id,wq.id,$3,$4::jsonb,TRUE
+       FROM workflow_requirements wr CROSS JOIN workflow_questions wq
+       WHERE wr.status='SOUMIS' AND wr.nature_code=$1 AND wr.code=$2
+         AND wq.status='SAISINE' AND wq.code=$5
+       ON CONFLICT(requirement_id,question_id,operator) DO UPDATE SET
+         expected_value=EXCLUDED.expected_value,active=true`,
+      [nature,code,operator,JSON.stringify(expected),qcode]
+    );
+  }
+  console.log("Dynamic questionnaire seeded");
+}
+
 export async function migrateDatabase(){
   const here=path.dirname(fileURLToPath(import.meta.url));
   const schema=await fs.readFile(path.resolve(here,"../../../database/schema.sql"),"utf8");
@@ -84,6 +127,7 @@ export async function migrateDatabase(){
   if(userEmail&&userPassword) await seedUser(userEmail,userPassword,"CITOYEN","Utilisateur test e-Travail");
   await seedRolePermissions();
   await seedWorkflowRequirements();
+  await seedDynamicQuestionnaire();
   await backfillCaseRequirements();
   await seedLegalCorpus();
   await seedLabourAmendment2021();
