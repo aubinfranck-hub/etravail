@@ -5,6 +5,7 @@ import { canTransition, allowedRolesByTransition, assignmentRoleByStatus, stageF
 import type { CaseStatus } from "../domain/workflow.js";
 import { notify } from "./notificationService.js";
 import { ensurePaymentForEnrollment } from "./paymentService.js";
+import { sendTrackingSms, type TrackingSmsEvent } from "./smsService.js";
 
 const NATURES = ["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HARCELEMENT","ACCIDENT_TRAVAIL","AUTRE"] as const;
 
@@ -434,6 +435,24 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus[input.next],requirements:req}});
   await setDueDate(input.id,input.next);
   if(assignmentRole) await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
+  const trackingEventByStatus:Partial<Record<CaseStatus,TrackingSmsEvent>>={
+    SOUMIS:"CASE_REGISTERED",
+    A_VERIFIER:"CASE_UNDER_REVIEW",
+    INCOMPLET:"CASE_INCOMPLETE",
+    ENROLEMENT:"CASE_ENROLLED",
+    AUDIENCE_PLANIFIEE:"HEARING_SCHEDULED",
+    DECISION_RENDUE:"DECISION_AVAILABLE"
+  };
+  const trackingEvent=trackingEventByStatus[input.next];
+  if(trackingEvent){
+    const claimantId=String(updated.claimant_id??"");
+    if(claimantId){
+      try{ await sendTrackingSms({userId:claimantId,caseId:input.id,event:trackingEvent}); }
+      catch(error){
+        await writeAudit({actorId:input.actorId,caseId:input.id,action:"SMS_TRACKING_NOT_SENT",metadata:{event:trackingEvent,reason:error instanceof Error?error.message:"SMS_FAILED"}});
+      }
+    }
+  }
   return updated;
 }
 
