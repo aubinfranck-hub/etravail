@@ -31,6 +31,16 @@ export const stageForStatus: Record<CaseStatus,string> = {
   NOTIFIE:"NOTIFICATION", ARCHIVE:"ARCHIVAGE"
 };
 
+/**
+ * Role responsable de chaque étape qui nécessite une nouvelle affectation.
+ * Les autres étapes conservent automatiquement le responsable courant.
+ */
+export const assignmentRoleByStatus: Partial<Record<CaseStatus,"GREFFE"|"MAGISTRAT">> = {
+  SOUMIS: "GREFFE",
+  ENROLEMENT: "MAGISTRAT",
+  NOTIFIE: "GREFFE"
+};
+
 export const allowedRolesByTransition: Partial<Record<string,string[]>> = {
   "BROUILLON->SOUMIS":["CITOYEN"],
   "SOUMIS->RECU_GREFFE":["GREFFE","ADMIN"],
