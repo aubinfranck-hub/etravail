@@ -75,3 +75,21 @@
  .smsCardBody button{width:100%;min-height:46px}
  .smsPrice{justify-self:start}
 }
+.citizenWizard{margin-top:18px;border:1px solid #e5e7eb;background:#fff;border-radius:18px;padding:22px}
+.wizardHeader{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.wizardHeader h2{margin:4px 0 6px}.wizardHeader p{margin:0;color:#667085;max-width:680px}.wizardHeader>strong{font-size:15px;background:#f5f1e8;padding:8px 12px;border-radius:999px}
+.wizardRail{display:flex;gap:6px;overflow:auto;margin:22px 0;padding-bottom:5px}
+.wizardStep{min-width:92px;display:flex;flex-direction:column;gap:7px;color:#98a2b3;font-size:11px}
+.wizardStep span{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;border:1px solid #d0d5dd;background:#fff}
+.wizardStep b{font-size:11px;white-space:nowrap}.wizardStep.active{color:#172033}.wizardStep.active span,.wizardStep.done span{background:#172033;color:#fff;border-color:#172033}
+.wizardReference{background:#f8fafc;border-radius:10px;padding:10px 12px;margin-bottom:18px;font-size:13px}
+.wizardBody{max-width:760px;margin:0 auto;padding:10px 0 4px}.wizardBody h3{margin:0 0 7px;font-size:20px}.wizardBody>p{color:#667085;margin:0 0 18px}
+.wizardBody label{display:flex;flex-direction:column;gap:7px;font-weight:600;font-size:13px;margin:14px 0}.wizardBody input,.wizardBody select{width:100%;box-sizing:border-box}
+.wizardQuestion,.wizardDocument{border:1px solid #eaecf0;border-radius:12px;padding:14px;margin:10px 0;background:#fcfcfd}
+.wizardQuestion{display:flex;flex-direction:column;gap:9px}.wizardQuestion b{font-size:14px}
+.wizardDocument{display:flex;align-items:center;justify-content:space-between;gap:12px}.wizardDocument>div{display:flex;flex-direction:column;gap:5px}.wizardDocument small{color:#667085}
+.wizardDocument input{max-width:260px}.wizardDocument button{white-space:nowrap}
+.summaryGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.summaryGrid>div{border:1px solid #eaecf0;border-radius:12px;padding:13px;display:flex;flex-direction:column;gap:4px}.summaryGrid small{color:#667085;text-transform:uppercase;font-size:10px}.summaryGrid span{color:#667085;font-size:13px}
+.confirmationBox{background:#f8fafc;border:1px solid #e4e7ec;border-radius:14px;padding:20px}.checkLine{display:flex!important;flex-direction:row!important;align-items:center;gap:10px!important}.checkLine input{width:auto}
+.wizardActions{display:flex;justify-content:space-between;gap:12px;margin-top:22px;padding-top:18px;border-top:1px solid #eaecf0}.wizardError{margin-top:14px;background:#fff1f2;color:#b42318;border:1px solid #fecdca;padding:10px 12px;border-radius:10px;font-size:13px}.successStep{text-align:center;padding:30px 10px}.successIcon{display:inline-grid;place-items:center;width:54px;height:54px;border-radius:50%;background:#ecfdf3;color:#027a48;font-size:28px}
+@media(max-width:700px){.citizenWizard{padding:15px;border-radius:14px}.wizardHeader h2{font-size:20px}.wizardRail{margin:16px -2px}.wizardBody{padding:4px 0}.wizardDocument{align-items:stretch;flex-direction:column}.wizardDocument input{max-width:none}.summaryGrid{grid-template-columns:1fr}.wizardActions{position:sticky;bottom:0;background:#fff;padding:14px 0 2px;z-index:5}.wizardActions button{flex:1}.wizardStep{min-width:82px}}
