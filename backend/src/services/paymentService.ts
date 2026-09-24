@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import { pool } from "../db.js";
 import { writeAudit } from "../repositories/auditRepository.js";
 
-type PaymentSource = "COMPTABILITE" | "CAISSE" | "EXTERNE";
+export type PaymentSource = "COMPTABILITE" | "CAISSE" | "EXTERNE";
+const PAYMENT_SOURCES:PaymentSource[]=["COMPTABILITE","CAISSE","EXTERNE"];
 
 export function paymentRequirementSatisfied(feeAmount:number|null,paymentStatus:string){
   const fee=feeAmount===null?null:Number(feeAmount);
@@ -42,11 +43,13 @@ export async function getPayment(caseId:string){
 
 export async function registerExternalValidationCode(input:{
   caseId:string; code:string; source:PaymentSource; externalReference?:string;
-  amount:number; currency?:string; actorId:string;
+  amount:number; currency?:string; actorId?:string;
 }){
   if(!input.code?.trim()) throw new Error("PAYMENT_CODE_REQUIRED");
+  if(!PAYMENT_SOURCES.includes(input.source)) throw new Error("INVALID_PAYMENT_SOURCE");
   if(!Number.isFinite(input.amount)||input.amount<0) throw new Error("INVALID_PAYMENT_AMOUNT");
   const currency=(input.currency??"XOF").trim().toUpperCase();
+  if(!currency) throw new Error("INVALID_PAYMENT_CURRENCY");
   const enrollment=await pool.query("SELECT fee_amount,currency FROM enrollments WHERE case_id=$1",[input.caseId]);
   if(!enrollment.rowCount) throw new Error("PAYMENT_NOT_SETUP");
   const fee=enrollment.rows[0].fee_amount===null?null:Number(enrollment.rows[0].fee_amount);
