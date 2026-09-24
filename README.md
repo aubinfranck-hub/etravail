@@ -51,3 +51,20 @@ Ce workflow applicatif devra être aligné avec les règles de procédure effect
 ## Statut
 
 **Phase 1 — Initialisation du socle**
+
+## Vérification des paiements
+
+Le paiement d'un dossier peut être validé par un **code externe** émis par la comptabilité, la caisse ou un système tiers.
+
+1. L'administration configure le montant et la devise du dossier.
+2. La comptabilité/caisse transmet un code à usage unique avec la source, le montant et la référence externe via l'intégration sécurisée.
+3. Le greffe ou l'administration saisit le code dans e-Travail.
+4. Le système vérifie le code, le montant et la devise, puis le consomme définitivement.
+5. La validation est inscrite dans le journal d'audit avec la source, la référence, le montant et l'horodatage.
+6. L'enrôlement est bloqué tant qu'un paiement obligatoire n'est pas en statut **PAYE** ou **EXONERE**.
+
+L'intégration externe utilise la variable d'environnement `PAYMENT_VALIDATION_API_KEY` et l'en-tête `X-Payment-Validation-Key`.
+
+## Statut technique
+
+**Phase 1 — Socle fonctionnel + workflow contrôlé + validation paiement externe + audit**
