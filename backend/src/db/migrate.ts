@@ -30,6 +30,19 @@ async function backfillCaseRequirements(){
     ON CONFLICT(case_id,requirement_id) DO NOTHING`);
 }
 
+
+async function seedRolePermissions(){
+  const entries=await import("../auth/permissions.js");
+  for(const role of Object.keys(entries.permissions) as Array<"CITOYEN"|"GREFFE"|"MAGISTRAT"|"ADMIN">){
+    for(const permission of entries.permissions[role]){
+      await pool.query(`INSERT INTO role_permissions(role,permission,enabled) VALUES($1,$2,TRUE)
+        ON CONFLICT(role,permission) DO NOTHING`,[role,permission]);
+    }
+  }
+  await entries.loadPermissions();
+  console.log("Role permissions loaded");
+}
+
 async function seedWorkflowRequirements(){
   const defaults=[
     ["IDENTITE","Pièce d'identité du demandeur",true,48,10],
@@ -69,6 +82,7 @@ export async function migrateDatabase(){
 
   if(adminEmail&&adminPassword) await seedUser(adminEmail,adminPassword,"ADMIN","Administrateur e-Travail");
   if(userEmail&&userPassword) await seedUser(userEmail,userPassword,"CITOYEN","Utilisateur test e-Travail");
+  await seedRolePermissions();
   await seedWorkflowRequirements();
   await backfillCaseRequirements();
   await seedLegalCorpus();
