@@ -216,7 +216,6 @@ async function ensureEnrollmentCreated(caseId:string,actorId:string){
   const current=await findCase(caseId);
   if(!current) throw new Error("CASE_NOT_FOUND");
   if(current.status!=="COMPLET") throw new Error("ENROLLMENT_CASE_NOT_COMPLETE");
-  await ensurePaymentForEnrollment(caseId);
 
   const existing=await pool.query(
     "SELECT * FROM enrollments WHERE case_id=$1 FOR UPDATE",
@@ -284,15 +283,14 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   const req=requirementStage?await requiredState(input.id,requirementStage):{required_count:0,received_count:0,validated_count:0};
   if(input.next==="SOUMIS" && !requiredDocumentsSatisfied(req,"SUBMIT")) throw new Error("REQUIRED_DOCUMENTS_MISSING");
   if(input.next==="COMPLET" && !requiredDocumentsSatisfied(req,"COMPLETE")) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
-  if(input.next==="ENROLEMENT"){
-    await ensureAutoAssignmentTarget(input.id,"MAGISTRAT");
-    await ensureEnrollmentCreated(input.id,input.actorId);
-  }
+  if(input.next==="ENROLEMENT") await ensurePaymentForEnrollment(input.id);
   if(input.next==="AUDIENCE") await ensureHearingExists(input.id);
   if(input.next==="DECISION_RENDUE") await ensureDecisionExists(input.id);
   const assignmentRole=assignmentRoleByStatus[input.next];
   if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole);
   const updated=await updateCaseStatus(input.id,input.next);
+  if(!updated) throw new Error("CASE_NOT_FOUND");
+  if(input.next==="ENROLEMENT") await ensureEnrollmentCreated(input.id,input.actorId);
   await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus[input.next],requirements:req}});
   await setDueDate(input.id,input.next);
   if(assignmentRole) await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
