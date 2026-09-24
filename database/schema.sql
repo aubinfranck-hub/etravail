@@ -66,11 +66,13 @@ CREATE TABLE IF NOT EXISTS enrollments (
   payment_status VARCHAR(30) NOT NULL DEFAULT 'A_PAYER'
     CHECK (payment_status IN ('A_PAYER','PAYE','EXONERE','ANNULE')),
   payment_reference VARCHAR(120),
+  exemption_reason TEXT,
   paid_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_enrollments_payment_status ON enrollments(payment_status);
+ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS exemption_reason TEXT;
 
 CREATE TABLE IF NOT EXISTS payment_validation_codes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
