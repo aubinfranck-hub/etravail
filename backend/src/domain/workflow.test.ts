@@ -48,7 +48,7 @@ test("notification returns responsibility to the registry",()=>{
   assert.equal(stageForStatus.NOTIFIE,"NOTIFICATION");
 });
 
-import {classifyNature,normalizeNature} from "../services/caseService.js";
+import {classifyNature,normalizeNature,requiredDocumentsSatisfied} from "../services/caseService.js";
 
 test("nature classifier recognizes core labour disputes",()=>{
   assert.equal(classifyNature("Licenciement abusif"),"LICENCIEMENT");
@@ -66,4 +66,16 @@ test("unknown nature falls back to AUTRE",()=>{
 
 test("explicit supported nature takes precedence over title classification",()=>{
   assert.equal(normalizeNature("CONGES","Licenciement"),"CONGES");
+});
+
+
+test("required documents must all be received before submission",()=>{
+  assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:2,validated_count:0},"SUBMIT"),false);
+  assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:3,validated_count:0},"SUBMIT"),true);
+});
+
+test("required documents must all be validated before completion",()=>{
+  const {requiredDocumentsSatisfied}=require("../services/caseService.js");
+  assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:3,validated_count:2},"COMPLETE"),false);
+  assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:3,validated_count:3},"COMPLETE"),true);
 });
