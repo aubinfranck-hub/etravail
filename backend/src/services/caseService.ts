@@ -274,8 +274,9 @@ export async function attachRequirementDocument(caseId:string,requirementId:stri
 
 export async function validateRequirement(caseId:string,requirementId:string,actorId:string,valid:boolean,reason?:string){
   const r0=await pool.query(
-    `SELECT cr.*,d.uploaded_by FROM case_requirements cr
+    `SELECT cr.*,d.uploaded_by,wr.label AS requirement_label FROM case_requirements cr
      LEFT JOIN documents d ON d.id=cr.document_id
+     JOIN workflow_requirements wr ON wr.id=cr.requirement_id
      WHERE cr.id=$1 AND cr.case_id=$2 LIMIT 1`,
     [requirementId,caseId]
   );
@@ -296,6 +297,18 @@ export async function validateRequirement(caseId:string,requirementId:string,act
     [requirementId,caseId,actorId,status,current.document_id,cleanReason]
   );
   await writeAudit({actorId,caseId,action:valid?"DOCUMENT_VALIDATED":"DOCUMENT_REJECTED",metadata:{requirementId,status,documentId:current.document_id,reason:cleanReason}});
+  const caseRow=await findCase(caseId);
+  if(caseRow){
+    await notify({
+      userId:caseRow.claimant_id,
+      caseId,
+      channel:"IN_APP",
+      subject:valid?"Pièce validée":"Pièce refusée",
+      body:valid
+        ? `La pièce « ${current.requirement_label} » du dossier ${caseRow.reference} a été validée.`
+        : `La pièce « ${current.requirement_label} » du dossier ${caseRow.reference} a été refusée. Motif : ${cleanReason}.`
+    });
+  }
   return r.rows[0];
 }
 
@@ -322,7 +335,10 @@ async function autoAssign(caseId:string,role:"GREFFE"|"MAGISTRAT",reason:string)
       "SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",
       [current.assigned_to,role]
     );
-    if(activeCurrent.rowCount) return current;
+    if(activeCurrent.rowCount){
+      await notify({userId:current.assigned_to,caseId,channel:"IN_APP",subject:"Étape du dossier modifiée",body:`Le dossier ${current.reference} est entré dans l'étape ${stageForStatus[current.status as CaseStatus]}. Vous restez en charge.`});
+      return current;
+    }
   }
 
   const r=await pool.query(`SELECT u.id,u.full_name,
@@ -460,7 +476,11 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(input.next==="ENROLEMENT") await ensureEnrollmentCreated(input.id,input.actorId);
   await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus[input.next],requirements:req}});
   await setDueDate(input.id,input.next);
-  if(assignmentRole) await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
+  if(assignmentRole){
+    await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
+  }else if(updated.assigned_to){
+    await notify({userId:updated.assigned_to,caseId:input.id,channel:"IN_APP",subject:"Étape du dossier modifiée",body:`Le dossier ${updated.reference} est passé à l'étape ${stageForStatus[input.next]}.`});
+  }
   const trackingEventByStatus:Partial<Record<CaseStatus,TrackingSmsEvent>>={
     SOUMIS:"CASE_REGISTERED",
     A_VERIFIER:"CASE_UNDER_REVIEW",
