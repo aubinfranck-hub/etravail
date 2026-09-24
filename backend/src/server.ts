@@ -7,7 +7,7 @@ import {checkDatabase} from "./db.js";
 import {migrateDatabase} from "./db/migrate.js";
 import {registerCitizen,authenticate} from "./services/userService.js";
 import {listUsers,updateUserAccess,findUserById} from "./repositories/userRepository.js";
-import {getCases,openCase,transitionCase,assignCaseTo,getRequirements,attachRequirementDocument,validateRequirement} from "./services/caseService.js";
+import {getCases,openCase,transitionCase,assignCaseTo,getRequirements,attachRequirementDocument,validateRequirement,reassignCasesFromUser} from "./services/caseService.js";
 import {findCase} from "./repositories/caseRepository.js";
 import {getParties,addParty} from "./services/partyService.js";
 import {getDocuments,registerDocument} from "./services/documentService.js";
@@ -196,9 +196,13 @@ router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req
   const active=Boolean(req.body?.active);
   if(!["CITOYEN","GREFFE","MAGISTRAT","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
   try{
+    const before=await findUserById(req.params.id);
     const updated=await updateUserAccess(req.params.id,{role,active});
     if(!updated)return res.status(404).json({error:"Utilisateur introuvable"});
-    await writeAudit({actorId:req.user!.id,action:"USER_ACCESS_CHANGED",metadata:{userId:updated.id,role:updated.role,active:updated.active}});
+    if(before && (before.active!==updated.active || before.role!==updated.role) && (before.active || before.role!==updated.role)){
+      await reassignCasesFromUser(updated.id,req.user!.id);
+    }
+    await writeAudit({actorId:req.user!.id,action:"USER_ACCESS_CHANGED",metadata:{userId:updated.id,fromRole:before?.role??null,toRole:updated.role,fromActive:before?.active??null,toActive:updated.active}});
     res.json({data:updated});
   }catch(e){handleError(res,e,"Impossible de modifier l'utilisateur");}
 });
