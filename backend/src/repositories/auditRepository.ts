@@ -37,3 +37,29 @@ export async function listAuditAll(limit=500){
     ORDER BY a.created_at DESC,a.id DESC LIMIT $1`,[Math.min(Math.max(limit,1),1000)]);
   return r.rows;
 }
+
+export async function verifyAuditChain(){
+  const r=await pool.query(`SELECT id,actor_id,case_id,action,metadata,actor_role,created_at,previous_hash,event_hash
+    FROM audit_logs ORDER BY created_at ASC,id ASC`);
+  let previousHash:string|null=null;
+  let checked=0;
+  for(const row of r.rows){
+    const createdAt=new Date(row.created_at).toISOString();
+    const payload=JSON.stringify({
+      actorId:row.actor_id??null,
+      caseId:row.case_id??null,
+      action:row.action,
+      metadata:row.metadata??null,
+      actorRole:row.actor_role??null,
+      createdAt,
+      previousHash
+    });
+    const expected=crypto.createHash("sha256").update(payload).digest("hex");
+    if(row.previous_hash!==previousHash||row.event_hash!==expected){
+      return {valid:false,checked,brokenEventId:row.id,expectedPreviousHash:previousHash,storedPreviousHash:row.previous_hash,expectedEventHash:expected,storedEventHash:row.event_hash};
+    }
+    previousHash=row.event_hash;
+    checked++;
+  }
+  return {valid:true,checked,brokenEventId:null};
+}
