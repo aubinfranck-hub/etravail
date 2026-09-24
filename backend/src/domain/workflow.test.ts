@@ -112,3 +112,8 @@ test("assignment status mapping covers operational stages",()=>{
   assert.equal(assignmentRoleByStatus.ENROLEMENT,"MAGISTRAT");
   assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
 });
+
+test("submission requirements are scoped to the target workflow stage",()=>{
+  assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:2,validated_count:2},"SUBMIT"),false);
+  assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:3,validated_count:0},"SUBMIT"),true);
+});
