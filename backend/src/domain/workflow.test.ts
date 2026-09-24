@@ -79,7 +79,6 @@ test("required documents must all be received before submission",()=>{
 });
 
 test("required documents must all be validated before completion",()=>{
-  const {requiredDocumentsSatisfied}=require("../services/caseService.js");
   assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:3,validated_count:2},"COMPLETE"),false);
   assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:3,validated_count:3},"COMPLETE"),true);
 });
