@@ -30,6 +30,7 @@ export async function loadPermissions(){
 }
 
 export function hasPermission(role:Role,permission:string){
+  if(role==="ADMIN") return true;
   return effective[role]?.includes(permission)??false;
 }
 
