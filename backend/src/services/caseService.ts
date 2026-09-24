@@ -2,7 +2,7 @@ import { pool } from "../db.js";
 import { createCase, findCase, listCases, updateCaseStatus, assignCase } from "../repositories/caseRepository.js";
 import { writeAudit } from "../repositories/auditRepository.js";
 import { canTransition, allowedRolesByTransition, assignmentRoleByStatus, stageForStatus } from "../domain/workflow.js";
-import type { CaseStatus } from "../domain/workflow.js";
+import type { CaseStatus, AssignmentRole } from "../domain/workflow.js";
 import { notify, notifyCaseParticipants } from "./notificationService.js";
 import { ensurePaymentForEnrollment } from "./paymentService.js";
 import { sendTrackingSms, type TrackingSmsEvent } from "./smsService.js";
@@ -113,22 +113,7 @@ async function seedCaseRequirements(caseId:string,natureCode:string){
 }
 
 async function autoAssignNewCase(caseId:string){
- const q=await pool.query(`SELECT u.id,u.role,COUNT(c.id)::int AS workload
-   FROM users u
-   JOIN user_stage_access usa ON usa.user_id=u.id AND usa.stage_key='SAISINE'
-   LEFT JOIN cases c ON c.assigned_to=u.id AND c.status NOT IN ('ARCHIVE')
-   WHERE u.active=true AND u.role='SAISINE'
-   GROUP BY u.id,u.role
-   ORDER BY workload ASC,u.id ASC
-   LIMIT 1`);
- if(!q.rows[0]) return null;
- const agent=q.rows[0];
- const assigned=await assignCase(caseId,agent.id,agent.role);
- if(assigned){
-   await writeAudit({actorId:agent.id,caseId,action:"CASE_AUTO_ASSIGNED",actorRole:agent.role,metadata:{stage:"SAISINE",reason:"Affectation automatique à la création"}});
-   await notify({userId:agent.id,caseId,channel:"IN_APP",subject:"Nouveau dossier à traiter",body:"Un nouveau dossier vous a été automatiquement affecté au service Saisine."});
- }
- return assigned;
+  return autoAssign(caseId,"SAISINE","Affectation automatique à la création du dossier");
 }
 
 export async function openCase(input:{claimantId:string;title:string;actorId:string;natureCode?:string}){
@@ -338,53 +323,42 @@ export async function getRequirementHistory(caseId:string,requirementId:string){
   return r.rows;
 }
 
-async function autoAssign(caseId:string,role:"GREFFE"|"MAGISTRAT",reason:string){
+async function autoAssign(caseId:string,role:AssignmentRole,reason:string){
   const current=await findCase(caseId);
   if(!current) throw new Error("CASE_NOT_FOUND");
-
-  // Si le dossier est déjà confié à un agent actif du bon rôle, on conserve
-  // cette affectation : une nouvelle étape ne doit pas provoquer un
-  // rééquilibrage inutile.
   if(current.assigned_to && current.assigned_role===role){
-    const activeCurrent=await pool.query(
-      "SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",
-      [current.assigned_to,role]
-    );
+    const activeCurrent=await pool.query("SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",[current.assigned_to,role]);
     if(activeCurrent.rowCount) return current;
   }
-
+  const stage=stageForStatus[current.status as CaseStatus];
   const r=await pool.query(`SELECT u.id,u.full_name,
     COUNT(c.id) FILTER (WHERE c.status NOT IN ('ARCHIVE') AND c.assigned_to=u.id)::int AS workload
     FROM users u LEFT JOIN cases c ON c.assigned_to=u.id
-    WHERE u.role=$1 AND u.active=true AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$2)
+    WHERE u.role=$1 AND u.active=true
+      AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$2)
     GROUP BY u.id,u.full_name
-    ORDER BY workload ASC,u.created_at ASC
-    LIMIT 1`,[role,stageForStatus[current.status as CaseStatus]]);
+    ORDER BY workload ASC,u.created_at ASC LIMIT 1`,[role,stage]);
   const target=r.rows[0];
-  if(!target) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
-
+  if(!target) return current;
   const updated=await assignCase(caseId,target.id,role);
   if(!updated) throw new Error("CASE_NOT_FOUND");
   await pool.query(`INSERT INTO case_assignments(case_id,assigned_to,assigned_role,assignment_type,reason)
     VALUES($1,$2,$3,'AUTO',$4)`,[caseId,target.id,role,reason]);
-  await writeAudit({caseId,action:"CASE_AUTO_ASSIGNED",actorRole:"SYSTEM",metadata:{assignedTo:target.id,assignedRole:role,workloadBefore:Number(target.workload),reason}});
-  const c=await findCase(caseId);
-  if(c) await notify({userId:target.id,caseId,channel:"IN_APP",subject:"Nouveau dossier affecté",body:`Le dossier ${c.reference} vous est affecté à l'étape ${stageForStatus[c.status as CaseStatus]}.`});
+  await writeAudit({caseId,action:"CASE_AUTO_ASSIGNED",actorRole:"SYSTEM",metadata:{assignedTo:target.id,assignedRole:role,stage,workloadBefore:Number(target.workload),reason}});
+  await notify({userId:target.id,caseId,channel:"IN_APP",subject:"Nouveau dossier affecté",body:`Le dossier ${updated.reference} vous est affecté à l'étape ${stage}.`});
   return updated;
 }
 
-async function ensureAutoAssignmentTarget(caseId:string,role:"GREFFE"|"MAGISTRAT"){
+async function ensureAutoAssignmentTarget(caseId:string,role:AssignmentRole){
   const current=await findCase(caseId);
   if(current?.assigned_to && current.assigned_role===role){
-    const activeCurrent=await pool.query(
-      "SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",
-      [current.assigned_to,role]
-    );
+    const activeCurrent=await pool.query("SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",[current.assigned_to,role]);
     if(activeCurrent.rowCount) return;
   }
+  const stage=stageForStatus[current?.status as CaseStatus];
   const available=await pool.query(
     "SELECT u.id FROM users u WHERE u.role=$1 AND u.active=true AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$2) LIMIT 1",
-    [role,stageForStatus[current?.status as CaseStatus]]
+    [role,stage]
   );
   if(!available.rowCount) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
 }
@@ -461,7 +435,6 @@ async function ensureStageAccessForTransition(next:CaseStatus, actorId:string, a
   if(!actorRole || actorRole==="ADMIN") return;
   const stage=stageForStatus[next];
   if(actorRole==="CITOYEN" && stage==="SAISINE") return;
-  if(actorRole!=="GREFFE" && actorRole!=="MAGISTRAT") throw new Error("ROLE_CANNOT_TRANSITION");
   const r=await pool.query("SELECT 1 FROM user_stage_access WHERE user_id=$1 AND stage_key=$2 LIMIT 1",[actorId,stage]);
   if(!r.rowCount) throw new Error("STAGE_ACCESS_REQUIRED");
 }
