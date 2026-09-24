@@ -24,6 +24,7 @@ import {getDecisions,issueDecision,decisionStageAllowed} from "./services/decisi
 import {searchLegal,addLegalSource,assistLegal} from "./services/legalService.js";
 import {listAudit,writeAudit,verifyAuditChain} from "./repositories/auditRepository.js";
 import {hasPermission,listPermissions,setPermission,type Role} from "./auth/permissions.js";
+import {stageForStatus} from "./domain/workflow.js";
 import type {CaseStatus} from "./domain/workflow.js";
 import {setupPayment,getPayment,registerExternalValidationCode,verifyPaymentByExternalCode,exemptPayment} from "./services/paymentService.js";
 import {getCaseSmsTracking,purchaseCaseSmsTracking,validateCaseSmsPayment,setCaseSmsTrackingOption} from "./services/smsService.js";
