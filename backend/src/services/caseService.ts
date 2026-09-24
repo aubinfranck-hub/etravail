@@ -8,7 +8,9 @@ import { ensurePaymentForEnrollment } from "./paymentService.js";
 
 const NATURES = ["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HARCELEMENT","ACCIDENT_TRAVAIL","AUTRE"] as const;
 
-function classifyNature(title:string){
+export async function getCases(){ return listCases(); }
+
+export function classifyNature(title:string){
   const t=title.toLowerCase();
   if(/licenci|renvoi|licenciement/.test(t)) return "LICENCIEMENT";
   if(/salaire|paie|rémun|remuner/.test(t)) return "SALAIRE_IMPAYE";
