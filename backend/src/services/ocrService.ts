@@ -6,7 +6,17 @@ export interface OCRResult {
   language: string;
 }
 
-export async function extractText(buffer: Buffer, language = "fra"): Promise<OCRResult> {
+const OCR_SUPPORTED_MIME_TYPES = new Set(["image/jpeg", "image/png"]);
+
+export async function extractText(buffer: Buffer, language = "fra", mimeType?: string): Promise<OCRResult> {
+  // tesseract.js's Node worker cannot decode PDFs: feeding it one throws
+  // inside the worker thread ("Error attempting to read image") outside of
+  // the recognize() promise, which crashes the whole process as an
+  // unhandled worker error instead of rejecting cleanly. Skip OCR for any
+  // file type it cannot read rather than letting the worker touch it.
+  if (mimeType && !OCR_SUPPORTED_MIME_TYPES.has(mimeType)) {
+    return { status: "FAILED", text: null, language };
+  }
   let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
   try {
     worker = await createWorker(language);
