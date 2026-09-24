@@ -136,10 +136,10 @@ export async function getWorkflowQuestions(caseId:string,status:string,natureCod
 }
 
 function validateQuestionAnswer(answerType:string,value:unknown){
-  validateQuestionAnswer(String(question.rows[0].answer_type),value);\n  await validateQuestionOptions(questionId,String(question.rows[0].answer_type),value);
+  if(value===undefined||value===null) throw new Error("ANSWER_REQUIRED");
   if(answerType==="BOOLEAN"&&typeof value!=="boolean") throw new Error("ANSWER_TYPE_INVALID");
-  if((answerType==="NUMBER"&& (typeof value!=="number" || !Number.isFinite(value))) ) throw new Error("ANSWER_TYPE_INVALID");
-  if((answerType==="DATE"&& (typeof value!=="string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value) || Number.isNaN(Date.parse(value)))) ) throw new Error("ANSWER_TYPE_INVALID");
+  if(answerType==="NUMBER"&&(typeof value!=="number"||!Number.isFinite(value))) throw new Error("ANSWER_TYPE_INVALID");
+  if(answerType==="DATE"&&(typeof value!=="string"||!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)||Number.isNaN(Date.parse(value)))) throw new Error("ANSWER_TYPE_INVALID");
   if((answerType==="TEXT"||answerType==="LONG_TEXT")&&typeof value!=="string") throw new Error("ANSWER_TYPE_INVALID");
   return true;
 }
