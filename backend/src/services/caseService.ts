@@ -143,6 +143,21 @@ export async function saveCaseAnswer(caseId:string,questionId:string,value:unkno
   return r.rows[0];
 }
 
+export async function ensureRequiredQuestionsAnswered(caseId:string,status:string,natureCode:string){
+  const r=await pool.query(
+    `SELECT wq.id,wq.code,wq.label
+     FROM workflow_questions wq
+     LEFT JOIN case_answers ca ON ca.question_id=wq.id AND ca.case_id=$1
+     WHERE wq.status=$2 AND wq.active=true AND wq.required=true
+       AND (wq.nature_code=$3 OR wq.nature_code IS NULL)
+       AND ca.id IS NULL
+     ORDER BY wq.sort_order,wq.label`,
+    [caseId,status,natureCode]
+  );
+  if(r.rowCount) throw new Error("REQUIRED_QUESTIONS_MISSING");
+  return true;
+}
+
 export function requiredDocumentsSatisfied(state:{required_count:number;received_count:number;validated_count:number},mode:"SUBMIT"|"COMPLETE"){
   if(mode==="SUBMIT") return Number(state.required_count)<=Number(state.received_count);
   return Number(state.required_count)<=Number(state.validated_count);
