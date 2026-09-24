@@ -54,30 +54,29 @@ async function seedRolePermissions(){
 }
 
 async function seedWorkflowRequirements(){
+  // Procédure de saisine du Tribunal du Travail d'Abidjan :
+  // PV de non-conciliation + requête + CNI.
+  // Les anciennes exigences génériques de saisine sont désactivées.
+  await pool.query(`UPDATE workflow_requirements
+    SET active=FALSE
+    WHERE status='SOUMIS'
+      AND code IN ('IDENTITE','CONTRAT_TRAVAIL','JUSTIFICATIF_LITIGE')`);
+
   const defaults=[
-    ["IDENTITE","Pièce d'identité du demandeur",true,48,10],
-    ["CONTRAT_TRAVAIL","Contrat de travail ou justificatif de relation de travail",true,48,20],
-    ["JUSTIFICATIF_LITIGE","Justificatif principal du litige",true,48,30]
+    ["PV_NON_CONCILIATION","Procès-verbal de non-conciliation",true,10],
+    ["REQUETE","Requête",true,20],
+    ["CNI","Carte nationale d'identité (CNI)",true,30]
   ];
-  const natures=["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HARCELEMENT","ACCIDENT_TRAVAIL","AUTRE"];
-  for(const nature of natures){
-    for(const [code,label,required,hours,order] of defaults){
-      await pool.query(`INSERT INTO workflow_requirements(status,nature_code,code,label,required,deadline_hours,sort_order)
-        VALUES('SOUMIS',$1,$2,$3,$4,$5,$6) ON CONFLICT(status,nature_code,code) DO UPDATE SET label=EXCLUDED.label,required=EXCLUDED.required,deadline_hours=EXCLUDED.deadline_hours,sort_order=EXCLUDED.sort_order,active=true`,
-        [nature,code,label,required,hours,order]);
-    }
+
+  for(const [code,label,required,order] of defaults){
+    await pool.query(`INSERT INTO workflow_requirements(status,nature_code,code,label,required,sort_order,active)
+      VALUES('SOUMIS',NULL,$1,$2,$3,$4,TRUE)
+      ON CONFLICT(status,nature_code,code) DO UPDATE SET
+        label=EXCLUDED.label,required=EXCLUDED.required,sort_order=EXCLUDED.sort_order,active=TRUE`,
+      [code,label,required,order]);
   }
-  const extras=[
-    ["ACCIDENT_TRAVAIL","CERTIFICAT_MEDICAL","Certificat médical / constat de l'accident",true,48,40],
-    ["HARCELEMENT","ELEMENTS_HARCELEMENT","Éléments ou faits documentant le signalement",true,48,40],
-    ["SALAIRE_IMPAYE","BULLETINS_SALAIRE","Bulletins de salaire / justificatifs de rémunération",true,48,40]
-  ];
-  for(const [nature,code,label,required,hours,order] of extras){
-    await pool.query(`INSERT INTO workflow_requirements(status,nature_code,code,label,required,deadline_hours,sort_order)
-      VALUES('SOUMIS',$1,$2,$3,$4,$5,$6) ON CONFLICT(status,nature_code,code) DO UPDATE SET label=EXCLUDED.label,required=EXCLUDED.required,deadline_hours=EXCLUDED.deadline_hours,sort_order=EXCLUDED.sort_order,active=true`,
-      [nature,code,label,required,hours,order]);
-  }
-  console.log("Workflow requirements seeded");
+
+  console.log("Official Tribunal du Travail filing requirements seeded");
 }
 
 async function seedDynamicQuestionnaire(){
