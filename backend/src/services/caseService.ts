@@ -463,7 +463,7 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(input.next==="DECISION_RENDUE") await ensureDecisionExists(input.id);
   const assignmentRole=assignmentRoleByStatus[input.next];
   if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole,input.next);
-  const updated=await updateCaseStatus(input.id,input.next);
+  let updated=await updateCaseStatus(input.id,input.next);
   if(!updated) throw new Error("CASE_NOT_FOUND");
   if(input.next==="ENROLEMENT") await ensureEnrollmentCreated(input.id,input.actorId);
   await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus[input.next],requirements:req}});
@@ -492,7 +492,7 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
     const c=await findCase(input.id);
     if(c) await notifyCaseParticipants({caseId:input.id,stage:targetStage,subject:labels[input.next]??"Mise à jour du dossier",body:`Le dossier ${c.reference} est passé au statut ${input.next}.`});
   }
-  if(assignmentRole) await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
+  if(assignmentRole) updated=await autoAssign(input.id,assignmentRole,`Entrée dans l’étape ${stageForStatus[input.next]}`);
   const trackingEventByStatus:Partial<Record<CaseStatus,TrackingSmsEvent>>={
     SOUMIS:"CASE_REGISTERED",
     A_VERIFIER:"CASE_UNDER_REVIEW",
