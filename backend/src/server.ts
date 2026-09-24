@@ -7,7 +7,7 @@ import {checkDatabase} from "./db.js";
 import {migrateDatabase} from "./db/migrate.js";
 import {registerCitizen,authenticate} from "./services/userService.js";
 import {listUsers,updateUserAccess,findUserById} from "./repositories/userRepository.js";
-import {getCases,openCase,transitionCase,assignCaseTo,getRequirements,getEnrollment,getWorkflowQuestions,saveCaseAnswer,ensureRequiredQuestionsAnswered,ensureRequirementCanReceive,attachRequirementDocument,validateRequirement,getRequirementHistory,reassignCasesFromUser,ensureCaseMutationAllowed} from "./services/caseService.js";
+import {getCases,openCase,updateCaseBasics,transitionCase,assignCaseTo,getRequirements,getEnrollment,getWorkflowQuestions,saveCaseAnswer,ensureRequiredQuestionsAnswered,ensureRequirementCanReceive,attachRequirementDocument,validateRequirement,getRequirementHistory,reassignCasesFromUser,ensureCaseMutationAllowed} from "./services/caseService.js";
 import {findCase} from "./repositories/caseRepository.js";
 import {getParties,addParty} from "./services/partyService.js";
 import {getDocuments,registerDocument} from "./services/documentService.js";
@@ -79,6 +79,15 @@ router.post("/api/v1/auth/login",rateLimit(10,15*60*1000),async(req:express.Requ
 router.get("/api/v1/dashboard",auth,async(req:Req,res:express.Response)=>{try{res.json({data:await getDashboard(req.user!.role,req.user!.id)});}catch(e){handleError(res,e,"Tableau de bord indisponible");}});
 router.get("/api/v1/cases",auth,async(req:Req,res:express.Response)=>{try{if(!req.user)return res.status(401).end();const all=await getCases();if(req.user.role==="CITOYEN")return res.json({data:all.filter(c=>c.claimant_id===req.user!.id)});if(!hasPermission(req.user.role,"case:read"))return res.status(403).json({error:"Permission refusée"});if(req.user.role==="ADMIN")return res.json({data:all});return res.json({data:all.filter(c=>c.assigned_to===req.user!.id)});}catch(e){handleError(res,e,"Impossible de récupérer les dossiers");}});
 router.post("/api/v1/cases",auth,permission("case:create"),async(req:Req,res:express.Response)=>{if(!req.body?.title)return res.status(400).json({error:"title est obligatoire"});try{res.status(201).json({data:await openCase({claimantId:req.user!.id,actorId:req.user!.id,title:String(req.body.title).trim(),natureCode:req.body?.natureCode})});}catch(e){handleError(res,e,"Impossible de créer le dossier");}});
+router.patch("/api/v1/cases/:id/basics",auth,async(req:Req,res:express.Response)=>{
+ try{
+  const a=await caseAccess(req,req.params.id,true);
+  if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});
+  if(req.user!.role!=="CITOYEN"&&req.user!.role!=="ADMIN")return res.status(403).json({error:"Permission refusée"});
+  const data=await updateCaseBasics(req.params.id,{title:req.body?.title,natureCode:req.body?.natureCode},req.user!.id);
+  res.json({data});
+ }catch(e){handleError(res,e,"Impossible de mettre à jour le dossier");}
+});
 router.get("/api/v1/cases/:id/questions",auth,async(req:Req,res:express.Response)=>{
  try{
   const a=await caseAccess(req,req.params.id);
