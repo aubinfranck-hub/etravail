@@ -21,10 +21,19 @@ async function ensureSchema(){
         amount_xof NUMERIC(14,2) NOT NULL CHECK(amount_xof>=0),
         quantity INTEGER NOT NULL DEFAULT 1,
         notification_id UUID REFERENCES notifications(id) ON DELETE SET NULL,
+        case_id UUID REFERENCES cases(id) ON DELETE SET NULL,
+        event_code VARCHAR(60),
+        status VARCHAR(20) NOT NULL DEFAULT 'SENT',
+        provider_reference VARCHAR(120),
         reference VARCHAR(120),
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS case_id UUID REFERENCES cases(id) ON DELETE SET NULL;
+      ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS event_code VARCHAR(60);
+      ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'SENT';
+      ALTER TABLE sms_transactions ADD COLUMN IF NOT EXISTS provider_reference VARCHAR(120);
       CREATE INDEX IF NOT EXISTS idx_sms_transactions_user ON sms_transactions(user_id,created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_sms_transactions_case ON sms_transactions(case_id,created_at DESC);
     `);
   })();
   return schemaReady;
@@ -70,10 +79,53 @@ export async function creditSms(userId:string,amount:number,reference?:string){
   }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
 }
 
-export async function sendPaidSms(input:{userId:string;notificationId?:string;body:string;phone?:string}){
+const TRACKING_EVENTS:Record<string,{status:string;label:string}>={
+  CASE_REGISTERED:{status:"SOUMIS",label:"dossier enregistré"},
+  CASE_UNDER_REVIEW:{status:"A_VERIFIER",label:"dossier en cours de vérification"},
+  CASE_INCOMPLETE:{status:"INCOMPLET",label:"dossier incomplet"},
+  CASE_ENROLLED:{status:"ENROLEMENT",label:"dossier enrôlé"},
+  HEARING_SCHEDULED:{status:"AUDIENCE_PLANIFIEE",label:"audience planifiée"},
+  DECISION_AVAILABLE:{status:"DECISION_RENDUE",label:"décision disponible"}
+};
+
+export type TrackingSmsEvent=keyof typeof TRACKING_EVENTS;
+
+function trackingMessage(reference:string,event:TrackingSmsEvent){
+  const e=TRACKING_EVENTS[event];
+  return `e-Travail : votre dossier ${reference} est ${e.label}. Consultez e-Travail pour les détails.`;
+}
+
+async function providerSend(phone:string,body:string){
+  const providerUrl=String(process.env.SMS_PROVIDER_URL??"").trim();
+  const providerKey=String(process.env.SMS_PROVIDER_API_KEY??"").trim();
+  if(!providerUrl||!providerKey)throw new Error("SMS_PROVIDER_NOT_CONFIGURED");
+  const response=await fetch(providerUrl,{
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization":`Bearer ${providerKey}`},
+    body:JSON.stringify({to:phone,message:body})
+  });
+  if(!response.ok)throw new Error("SMS_PROVIDER_FAILED");
+  let providerReference:string|undefined;
+  try{
+    const data=await response.json() as Record<string,unknown>;
+    const candidate=data.message_id??data.messageId??data.id;
+    if(candidate)providerReference=String(candidate);
+  }catch{}
+  return providerReference;
+}
+
+export async function sendTrackingSms(input:{userId:string;caseId:string;event:TrackingSmsEvent;phone?:string}){
   await ensureSchema();
-  const user=await pool.query("SELECT phone FROM users WHERE id=$1 LIMIT 1",[input.userId]);
-  const phone=String(input.phone??user.rows[0]?.phone??"").trim();
+  const event=TRACKING_EVENTS[input.event];
+  if(!event)throw new Error("SMS_TRACKING_EVENT_NOT_ALLOWED");
+
+  const caseResult=await pool.query(
+    `SELECT c.reference,u.phone
+     FROM cases c JOIN users u ON u.id=c.claimant_id
+     WHERE c.id=$1 LIMIT 1`,[input.caseId]);
+  if(!caseResult.rowCount)throw new Error("CASE_NOT_FOUND");
+  const reference=String(caseResult.rows[0].reference);
+  const phone=String(input.phone??caseResult.rows[0].phone??"").trim();
   if(!phone)throw new Error("SMS_PHONE_REQUIRED");
 
   const client=await pool.connect();
@@ -87,24 +139,17 @@ export async function sendPaidSms(input:{userId:string;notificationId?:string;bo
     const price=Number(row.unit_price_xof??DEFAULT_UNIT_PRICE);
     if(Number(row.balance_xof)<price)throw new Error("SMS_INSUFFICIENT_BALANCE");
 
-    const providerUrl=String(process.env.SMS_PROVIDER_URL??"").trim();
-    const providerKey=String(process.env.SMS_PROVIDER_API_KEY??"").trim();
-    if(!providerUrl||!providerKey)throw new Error("SMS_PROVIDER_NOT_CONFIGURED");
-
-    const response=await fetch(providerUrl,{
-      method:"POST",
-      headers:{"Content-Type":"application/json","Authorization":`Bearer ${providerKey}`},
-      body:JSON.stringify({to:phone,message:input.body})
-    });
-    if(!response.ok)throw new Error("SMS_PROVIDER_FAILED");
+    const body=trackingMessage(reference,input.event);
+    const providerReference=await providerSend(phone,body);
 
     await client.query(
       `UPDATE sms_accounts SET balance_xof=balance_xof-$1,updated_at=CURRENT_TIMESTAMP WHERE user_id=$2`,
       [price,input.userId]);
     await client.query(
-      `INSERT INTO sms_transactions(user_id,type,amount_xof,quantity,notification_id)
-       VALUES($1,'DEBIT',$2,1,$3)`,[input.userId,price,input.notificationId??null]);
+      `INSERT INTO sms_transactions(user_id,type,amount_xof,quantity,case_id,event_code,status,provider_reference,reference)
+       VALUES($1,'DEBIT',$2,1,$3,$4,'SENT',$5,$6)`,
+      [input.userId,price,input.caseId,input.event,providerReference??null,reference]);
     await client.query("COMMIT");
-    return {sent:true,phone,charged_xof:price};
+    return {sent:true,phone,charged_xof:price,event:input.event,reference};
   }catch(e){await client.query("ROLLBACK");throw e;}finally{client.release();}
 }
