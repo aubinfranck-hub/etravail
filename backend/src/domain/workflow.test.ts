@@ -47,3 +47,23 @@ test("notification returns responsibility to the registry",()=>{
   assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
   assert.equal(stageForStatus.NOTIFIE,"NOTIFICATION");
 });
+
+import {classifyNature,normalizeNature} from "../services/caseService.js";
+
+test("nature classifier recognizes core labour disputes",()=>{
+  assert.equal(classifyNature("Licenciement abusif"),"LICENCIEMENT");
+  assert.equal(classifyNature("Salaire impayé de trois mois"),"SALAIRE_IMPAYE");
+  assert.equal(classifyNature("Congé non accordé"),"CONGES");
+  assert.equal(classifyNature("Rupture du contrat"),"RUPTURE_CONTRAT");
+  assert.equal(classifyNature("Harcèlement au travail"),"HARCELEMENT");
+  assert.equal(classifyNature("Accident de travail"),"ACCIDENT_TRAVAIL");
+});
+
+test("unknown nature falls back to AUTRE",()=>{
+  assert.equal(normalizeNature("INCONNU","Demande générale"),"AUTRE");
+  assert.equal(classifyNature("Demande générale"),"AUTRE");
+});
+
+test("explicit supported nature takes precedence over title classification",()=>{
+  assert.equal(normalizeNature("CONGES","Licenciement"),"CONGES");
+});
