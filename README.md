@@ -65,6 +65,17 @@ Le paiement d'un dossier peut être validé par un **code externe** émis par la
 
 L'intégration externe utilise la variable d'environnement `PAYMENT_VALIDATION_API_KEY` et l'en-tête `X-Payment-Validation-Key`.
 
+## Contrôle d'intégrité de l'audit
+
+L'administration dispose de l'endpoint authentifié `GET /api/v1/admin/audit/integrity`.
+Il vérifie séquentiellement la chaîne des événements d'audit et signale le premier événement dont le `previous_hash` ou le `event_hash` ne correspond plus au calcul attendu.
+
+Les écritures d'audit sont sérialisées dans une transaction PostgreSQL afin d'éviter que deux écritures concurrentes produisent le même précédent de chaîne.
+
+## Tests
+
+Le backend exécute les tests Node natifs avant la compilation TypeScript. Les tests métier couvrent notamment la matrice des transitions, les rôles autorisés, les affectations automatiques et la classification des natures de litige.
+
 ## Statut technique
 
-**Phase 1 — Socle fonctionnel + workflow contrôlé + validation paiement externe + audit**
+**Phase 1 — Socle fonctionnel + workflow contrôlé + validation paiement externe + audit intégrité
