@@ -71,6 +71,23 @@ CREATE TABLE IF NOT EXISTS enrollments (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_enrollments_payment_status ON enrollments(payment_status);
+
+CREATE TABLE IF NOT EXISTS payment_validation_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  code_hash VARCHAR(128) NOT NULL,
+  source VARCHAR(30) NOT NULL CHECK (source IN ('COMPTABILITE','CAISSE','EXTERNE')),
+  external_reference VARCHAR(120),
+  amount NUMERIC(14,2) NOT NULL,
+  currency VARCHAR(10) NOT NULL DEFAULT 'XOF',
+  issued_by UUID REFERENCES users(id),
+  issued_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  used_at TIMESTAMPTZ,
+  used_by UUID REFERENCES users(id),
+  UNIQUE(case_id,code_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_payment_codes_case ON payment_validation_codes(case_id,issued_at DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_codes_hash ON payment_validation_codes(code_hash);
 CREATE INDEX IF NOT EXISTS idx_cases_reference ON cases(reference);
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS assigned_role VARCHAR(30);
