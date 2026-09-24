@@ -153,6 +153,8 @@ export async function saveCaseAnswer(caseId:string,questionId:string,value:unkno
      RETURNING *`,
     [caseId,questionId,JSON.stringify(value),actorId]
   );
+  const caseRow=await findCase(caseId);
+  if(caseRow) await syncCaseRequirements(caseId,String(caseRow.nature_code??"AUTRE"),"SOUMIS");
   await writeAudit({actorId,caseId,action:"CASE_QUESTION_ANSWERED",metadata:{questionId,value}});
   return r.rows[0];
 }
@@ -204,12 +206,13 @@ export async function getRequirements(caseId:string){
 
 export async function ensureRequirementCanReceive(caseId:string,requirementId:string){
   const r=await pool.query(
-    `SELECT cr.id,cr.status,cr.document_id,wr.code,wr.label
+    `SELECT cr.id,cr.status,cr.document_id,cr.applicable,wr.code,wr.label
      FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
      WHERE cr.id=$1 AND cr.case_id=$2 LIMIT 1`,
     [requirementId,caseId]
   );
   if(!r.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
+  if(!r.rows[0].applicable) throw new Error("REQUIREMENT_NOT_APPLICABLE");
   if(r.rows[0].status==="VALIDATED") throw new Error("REQUIREMENT_ALREADY_VALIDATED");
   return r.rows[0];
 }
