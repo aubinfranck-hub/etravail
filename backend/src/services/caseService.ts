@@ -53,7 +53,7 @@ async function requiredState(caseId:string){
     COUNT(*) FILTER (WHERE wr.required AND cr.status IN ('RECEIVED','VALIDATED'))::int AS received_count,
     COUNT(*) FILTER (WHERE wr.required AND cr.status='VALIDATED')::int AS validated_count
     FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
-    WHERE cr.case_id=$1`,[caseId]);
+    WHERE cr.case_id=$1 AND wr.active=true`,[caseId]);
   return r.rows[0]??{required_count:0,received_count:0,validated_count:0};
 }
 
@@ -68,6 +68,8 @@ export async function getRequirements(caseId:string){
 }
 
 export async function attachRequirementDocument(caseId:string,requirementId:string,documentId:string,actorId:string){
+  const document=await pool.query("SELECT id FROM documents WHERE id=$1 AND case_id=$2 LIMIT 1",[documentId,caseId]);
+  if(!document.rowCount) throw new Error("DOCUMENT_CASE_MISMATCH");
   const r=await pool.query(`UPDATE case_requirements SET status='RECEIVED',document_id=$1,updated_at=CURRENT_TIMESTAMP
     WHERE id=$2 AND case_id=$3 RETURNING *`,[documentId,requirementId,caseId]);
   if(!r.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
