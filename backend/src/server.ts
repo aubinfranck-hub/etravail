@@ -26,6 +26,7 @@ import {listAudit,writeAudit,verifyAuditChain} from "./repositories/auditReposit
 import {hasPermission,listPermissions,setPermission,type Role} from "./auth/permissions.js";
 import type {CaseStatus} from "./domain/workflow.js";
 import {setupPayment,getPayment,registerExternalValidationCode,verifyPaymentByExternalCode,exemptPayment} from "./services/paymentService.js";
+import {getSmsAccount,setSmsOption,creditSms} from "./services/smsService.js";
 import {listWorkflowRequirements,createWorkflowRequirement,updateWorkflowRequirement} from "./services/workflowRequirementService.js";
 
 const app=express(), port=Number(process.env.APP_PORT??3000), isProduction=process.env.APP_ENV==="production"||process.env.NODE_ENV==="production", jwtSecret=process.env.JWT_SECRET??"development-only-change-me";
@@ -211,6 +212,27 @@ router.get("/api/v1/calendar",auth,async(req:Req,res:express.Response)=>{try{res
 
 router.get("/api/v1/notifications",auth,async(req:Req,res:express.Response)=>{try{res.json({data:await getNotifications(req.user!.id)});}catch(e){handleError(res,e,"Impossible de récupérer les notifications");}});
 router.patch("/api/v1/notifications/:id/read",auth,async(req:Req,res:express.Response)=>{try{res.json({data:await markNotificationRead(req.params.id,req.user!.id)});}catch(e){handleError(res,e,"Notification introuvable");}});
+router.get("/api/v1/notifications/sms/account",auth,async(req:Req,res:express.Response)=>{
+ try{res.json({data:await getSmsAccount(req.user!.id)});}catch(e){handleError(res,e,"Option SMS indisponible");}
+});
+router.patch("/api/v1/notifications/sms/option",auth,async(req:Req,res:express.Response)=>{
+ try{
+  const data=await setSmsOption(req.user!.id,req.body?.enabled===true);
+  await writeAudit({actorId:req.user!.id,action:"SMS_OPTION_CHANGED",metadata:{enabled:data.enabled}});
+  res.json({data});
+ }catch(e){handleError(res,e,"Modification de l'option SMS impossible");}
+});
+router.post("/api/v1/admin/notifications/sms/credit",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
+ try{
+  const userId=String(req.body?.userId??"");
+  const amount=Number(req.body?.amount);
+  if(!userId||!Number.isFinite(amount)||amount<=0)return res.status(400).json({error:"userId et montant positif obligatoires"});
+  const data=await creditSms(userId,amount,req.body?.reference?String(req.body.reference):undefined);
+  await writeAudit({actorId:req.user!.id,action:"SMS_ACCOUNT_CREDITED",metadata:{userId,amount,reference:req.body?.reference??null}});
+  res.status(201).json({data});
+ }catch(e){handleError(res,e,"Crédit SMS impossible");}
+});
+
 router.post("/api/v1/notifications",auth,permission("notification:manage"),async(req:Req,res:express.Response)=>{if(!req.body?.userId||!req.body?.subject||!req.body?.body)return res.status(400).json({error:"userId, subject et body sont obligatoires"});try{res.status(201).json({data:await notify({userId:req.body.userId,caseId:req.body.caseId,channel:req.body.channel??"IN_APP",subject:req.body.subject,body:req.body.body})});}catch(e){handleError(res,e,"Impossible de créer la notification");}});
 router.get("/api/v1/cases/:id/audit",auth,permission("case:read"),async(req:Req,res:express.Response)=>{try{res.json({data:await listAudit(req.params.id)});}catch(e){handleError(res,e,"Journal d'audit indisponible");}});
 router.get("/api/v1/cases/:id/decisions",auth,async(req:Req,res:express.Response)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});if(req.user?.role!=="CITOYEN"&&!hasPermission(req.user!.role,"case:read"))return res.status(403).json({error:"Permission refusée"});try{res.json({data:await getDecisions(req.params.id)});}catch(e){handleError(res,e,"Impossible de récupérer les décisions");}});
