@@ -294,7 +294,7 @@ router.patch("/api/v1/admin/permissions",auth,permission("admin:manage"),async(r
  try{
   const role=String(req.body?.role??"") as Role;
   const permissionName=String(req.body?.permission??"");
-  if(!["CITOYEN","GREFFE","MAGISTRAT","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
+  if(!["CITOYEN","SAISINE","GREFFE","CONTROLE","ENROLEMENT","AUDIENCES","MAGISTRAT","NOTIFICATION","ARCHIVAGE","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
   const item=await setPermission({role,permission:permissionName,enabled:req.body?.enabled===true,actorId:req.user!.id});
   await writeAudit({actorId:req.user!.id,action:"ROLE_PERMISSION_CHANGED",metadata:{role,permission:permissionName,enabled:item.enabled}});
   res.json({data:item});
@@ -303,8 +303,8 @@ router.patch("/api/v1/admin/permissions",auth,permission("admin:manage"),async(r
 
 router.post("/api/v1/admin/users",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
   try{
-    const role=String(req.body?.role??"") as "GREFFE"|"MAGISTRAT"|"ADMIN";
-    if(!["GREFFE","MAGISTRAT","ADMIN"].includes(role)) return res.status(400).json({error:"Rôle de compte interne invalide"});
+    const role=String(req.body?.role??"") as "SAISINE"|"GREFFE"|"CONTROLE"|"ENROLEMENT"|"AUDIENCES"|"MAGISTRAT"|"NOTIFICATION"|"ARCHIVAGE"|"ADMIN";
+    if(!["SAISINE","GREFFE","CONTROLE","ENROLEMENT","AUDIENCES","MAGISTRAT","NOTIFICATION","ARCHIVAGE","ADMIN"].includes(role)) return res.status(400).json({error:"Rôle de compte interne invalide"});
     const data=await createStaffAccount({
       email:String(req.body?.email??"").trim(),
       password:String(req.body?.password??""),
