@@ -23,7 +23,7 @@ export async function authenticate(email: string, password: string) {
 }
 
 
-export async function createStaffAccount(input:{email:string;password:string;fullName?:string;phone?:string;role:"GREFFE"|"MAGISTRAT"|"ADMIN";stages:string[];createdBy:string}) {
+export async function createStaffAccount(input:{email:string;password:string;fullName?:string;phone?:string;role:"SAISINE"|"GREFFE"|"CONTROLE"|"ENROLEMENT"|"AUDIENCES"|"MAGISTRAT"|"NOTIFICATION"|"ARCHIVAGE"|"ADMIN";stages:string[];createdBy:string}) {
   if(input.password.length<8) throw new Error("PASSWORD_TOO_SHORT");
   if(await findUserByEmail(input.email)) throw new Error("EMAIL_EXISTS");
   const allowed=["SAISINE","GREFFE","CONTROLE","ENROLEMENT","AUDIENCES","DECISIONS","NOTIFICATION","ARCHIVAGE"];
