@@ -180,6 +180,39 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   return updated;
 }
 
+export async function reassignCasesFromUser(userId:string,actorId:string){
+  const r=await pool.query(
+    "SELECT id,status FROM cases WHERE assigned_to=$1 AND status<>'ARCHIVE' ORDER BY created_at ASC",
+    [userId]
+  );
+  const results=[];
+  for(const item of r.rows){
+    const role=assignmentRoleByStatus[item.status as CaseStatus];
+    if(!role) continue;
+    const target=await pool.query(
+      `SELECT u.id,u.full_name,COUNT(c.id) FILTER (WHERE c.status<>'ARCHIVE' AND c.assigned_to=u.id)::int AS workload
+       FROM users u LEFT JOIN cases c ON c.assigned_to=u.id
+       WHERE u.role=$1 AND u.active=true AND u.id<>$2
+       GROUP BY u.id,u.full_name ORDER BY workload ASC,u.created_at ASC LIMIT 1`,
+      [role,userId]
+    );
+    if(!target.rowCount) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
+    const selected=target.rows[0];
+    const updated=await assignCase(item.id,selected.id,role);
+    if(updated){
+      await pool.query(
+        `INSERT INTO case_assignments(case_id,assigned_to,assigned_role,assigned_by,assignment_type,reason)
+         VALUES($1,$2,$3,$4,'REASSIGNMENT',$5)`,
+        [item.id,selected.id,role,actorId,"Réaffectation automatique après désactivation/changement de rôle"]
+      );
+      await writeAudit({actorId,caseId:item.id,action:"CASE_AUTO_REASSIGNED",metadata:{fromAssignedTo:userId,toAssignedTo:selected.id,assignedRole:role,reason:"AGENT_ACCESS_CHANGED"}});
+      await notify({userId:selected.id,caseId:item.id,channel:"IN_APP",subject:"Dossier réaffecté",body:`Un dossier vous a été réaffecté à l'étape ${stageForStatus[item.status as CaseStatus]}.`});
+      results.push({caseId:item.id,assignedTo:selected.id,assignedRole:role});
+    }
+  }
+  return results;
+}
+
 export async function assignCaseTo(input:{id:string;assignedTo:string|null;assignedRole:string|null;actorId:string;reason?:string}){
  const item=await findCase(input.id); if(!item) throw new Error("CASE_NOT_FOUND");
  const updated=await assignCase(input.id,input.assignedTo,input.assignedRole);
