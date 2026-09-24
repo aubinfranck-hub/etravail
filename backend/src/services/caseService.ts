@@ -330,7 +330,14 @@ async function autoAssign(caseId:string,role:AssignmentRole,reason:string){
     const activeCurrent=await pool.query("SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",[current.assigned_to,role]);
     if(activeCurrent.rowCount) return current;
   }
-  const stage=stageForStatus[current.status as CaseStatus];
+  // The agent must have access to the stage the *role* operates in, not the
+  // stage of the case's current status: e.g. submitting a case (BROUILLON ->
+  // SOUMIS) assigns the GREFFE role, but SOUMIS itself is still bucketed
+  // under the SAISINE stage, so stageForStatus[current.status] would look
+  // for a GREFFE agent with SAISINE access - which no GREFFE agent has -
+  // and auto-assignment would silently do nothing (or, in
+  // ensureAutoAssignmentTarget below, block the transition outright).
+  const stage=role;
   const r=await pool.query(`SELECT u.id,u.full_name,
     COUNT(c.id) FILTER (WHERE c.status NOT IN ('ARCHIVE') AND c.assigned_to=u.id)::int AS workload
     FROM users u LEFT JOIN cases c ON c.assigned_to=u.id
@@ -355,7 +362,7 @@ async function ensureAutoAssignmentTarget(caseId:string,role:AssignmentRole,next
     const activeCurrent=await pool.query("SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",[current.assigned_to,role]);
     if(activeCurrent.rowCount) return;
   }
-  const stage=stageForStatus[nextStatus];
+  const stage=role;
   const available=await pool.query(
     "SELECT u.id FROM users u WHERE u.role=$1 AND u.active=true AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$2) LIMIT 1",
     [role,stage]
