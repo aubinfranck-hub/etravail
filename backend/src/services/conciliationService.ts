@@ -1,5 +1,6 @@
 import {createConciliation,listConciliations,findConciliation,updateConciliationStatus} from "../repositories/conciliationRepository.js";
 export function getConciliations(caseId:string){return listConciliations(caseId);}
+export function conciliationStageAllowed(status:string){return status==="CONCILIATION";}
 export async function scheduleConciliation(i:{caseId:string;scheduledAt:string;room?:string;createdBy:string;notes?:string}){const d=new Date(i.scheduledAt);if(Number.isNaN(d.getTime()))throw new Error("INVALID_DATE");if(d.getTime()<=Date.now())throw new Error("DATE_IN_PAST");return createConciliation(i);}
 export function getConciliation(id:string){return findConciliation(id);}
 export function updateConciliation(id:string,status:string,notes?:string){if(!["PLANIFIEE","EN_COURS","ACCORD","ECHEC","ANNULEE"].includes(status))throw new Error("INVALID_STATUS");return updateConciliationStatus(id,status,notes);}
