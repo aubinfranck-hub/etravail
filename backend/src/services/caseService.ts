@@ -328,10 +328,10 @@ async function autoAssign(caseId:string,role:"GREFFE"|"MAGISTRAT",reason:string)
   const r=await pool.query(`SELECT u.id,u.full_name,
     COUNT(c.id) FILTER (WHERE c.status NOT IN ('ARCHIVE') AND c.assigned_to=u.id)::int AS workload
     FROM users u LEFT JOIN cases c ON c.assigned_to=u.id
-    WHERE u.role=$1 AND u.active=true
+    WHERE u.role=$1 AND u.active=true AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$2)
     GROUP BY u.id,u.full_name
     ORDER BY workload ASC,u.created_at ASC
-    LIMIT 1`,[role]);
+    LIMIT 1`,[role,stageForStatus[current.status as CaseStatus]]);
   const target=r.rows[0];
   if(!target) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
 
@@ -355,8 +355,8 @@ async function ensureAutoAssignmentTarget(caseId:string,role:"GREFFE"|"MAGISTRAT
     if(activeCurrent.rowCount) return;
   }
   const available=await pool.query(
-    "SELECT id FROM users WHERE role=$1 AND active=true LIMIT 1",
-    [role]
+    "SELECT u.id FROM users u WHERE u.role=$1 AND u.active=true AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$2) LIMIT 1",
+    [role,stageForStatus[current?.status as CaseStatus]]
   );
   if(!available.rowCount) throw new Error("NO_ACTIVE_ASSIGNMENT_AGENT");
 }
@@ -429,11 +429,21 @@ async function ensureHearingExists(caseId:string){
   if(!r.rowCount) throw new Error("HEARING_REQUIRED");
 }
 
+async function ensureStageAccessForTransition(next:CaseStatus, actorId:string, actorRole?:string){
+  if(!actorRole || actorRole==="ADMIN") return;
+  const stage=stageForStatus[next];
+  if(actorRole==="CITOYEN" && stage==="SAISINE") return;
+  if(actorRole!=="GREFFE" && actorRole!=="MAGISTRAT") throw new Error("ROLE_CANNOT_TRANSITION");
+  const r=await pool.query("SELECT 1 FROM user_stage_access WHERE user_id=$1 AND stage_key=$2 LIMIT 1",[actorId,stage]);
+  if(!r.rowCount) throw new Error("STAGE_ACCESS_REQUIRED");
+}
+
 export async function transitionCase(input:{id:string;next:CaseStatus;actorId:string;actorRole?:string}){
   const item=await findCase(input.id); if(!item) throw new Error("CASE_NOT_FOUND");
   if(!canTransition(item.status as CaseStatus,input.next)) throw new Error("INVALID_TRANSITION");
   const roles=allowedRolesByTransition[`${item.status}->${input.next}`];
   if(roles&&input.actorRole&&!roles.includes(input.actorRole)) throw new Error("ROLE_CANNOT_TRANSITION");
+  await ensureStageAccessForTransition(input.next,input.actorId,input.actorRole);
   const requirementStage=requirementStageForTransition(input.next);
   const currentCaseNature=String(item.nature_code??"AUTRE");
   if(requirementStage) await syncCaseRequirements(input.id,currentCaseNature,requirementStage);
