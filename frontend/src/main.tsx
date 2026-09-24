@@ -79,6 +79,23 @@ function CitizenCaseWizard({user,onDone,onError}:{user:any;onDone:(c:any)=>void;
  </section>
 }
 
+function auditBusinessLabel(x:any){
+ const labels:any={CASE_CREATED:"Dossier créé",CASE_STATUS_CHANGED:"Changement de statut",CASE_ASSIGNED:"Affectation du dossier",CASE_REASSIGNED:"Réaffectation du dossier",DOCUMENT_UPLOADED:"Pièce déposée",DOCUMENT_VALIDATED:"Pièce validée",DOCUMENT_REJECTED:"Pièce rejetée",PAYMENT_RECORDED:"Paiement enregistré",PAYMENT_VALIDATED:"Paiement validé",HEARING_SCHEDULED:"Audience programmée",CONCILIATION_SCHEDULED:"Conciliation programmée",DECISION_ISSUED:"Décision enregistrée",NOTIFICATION_SENT:"Décision notifiée",CASE_ARCHIVED:"Dossier archivé"};
+ return labels[x?.action]||null;
+}
+function auditBusinessDetail(x:any){
+ const m=x?.metadata||{};
+ if(x?.action==="CASE_CREATED") return m.reference?"Référence : "+m.reference:"Dossier créé";
+ if(x?.action==="CASE_STATUS_CHANGED"){
+  const status:any={BROUILLON:"Brouillon",SOUMIS:"Soumis",RECU_GREFFE:"Reçu au greffe",A_VERIFIER:"À contrôler",COMPLET:"Dossier complet",INCOMPLET:"Dossier incomplet",ENROLEMENT:"Enrôlement",CONCILIATION:"Conciliation",CONCILIE:"Conciliation réussie",CONCILIATION_ECHEC:"Conciliation échouée",AUDIENCE_PLANIFIEE:"Audience programmée",AUDIENCE:"Audience",DECISION_RENDUE:"Décision rendue",NOTIFIE:"Notification",ARCHIVE:"Archivé"};
+  const from=status[m.from]||m.from||"—",to=status[m.to]||m.to||"—";
+  const req=m.requirements;
+  const pieces=req&&Number.isFinite(Number(req.required_count))?" · Pièces : "+(req.received_count||0)+"/"+(req.required_count||0)+" reçues":"";
+  return from+" → "+to+pieces;
+ }
+ return "";
+}
+
 function CaseDetail({c,userRole,onClose,onRefresh,onError}:{c:Case;userRole:string;onClose:()=>void;onRefresh:()=>void;onError:(x:string)=>void}){
  const[parties,setParties]=useState<any[]>([]),[docs,setDocs]=useState<any[]>([]),[requirements,setRequirements]=useState<any[]>([]),[questions,setQuestions]=useState<any[]>([]),[hearings,setHearings]=useState<any[]>([]),[conc,setConc]=useState<any[]>([]),[dec,setDec]=useState<any[]>([]),[audit,setAudit]=useState<any[]>([]),[payment,setPayment]=useState<any>(null);
  const[busy,setBusy]=useState(false),[party,setParty]=useState({type:"SALARIE",fullName:"",contact:""}),[file,setFile]=useState<File|null>(null);
@@ -97,7 +114,7 @@ function CaseDetail({c,userRole,onClose,onRefresh,onError}:{c:Case;userRole:stri
  <div className="panel"><h3>Conciliations</h3>{conc.map(x=><div className="row" key={x.id}><b>{new Date(x.scheduled_at).toLocaleString("fr-FR")}</b><span>{x.room||"Salle —"} · {x.status}</span>{staff&&<div className="buttonRow">{["EN_COURS","ACCORD","ECHEC","ANNULEE"].map(s=><button key={s} onClick={()=>act(()=>updateConciliation(x.id,s,notes))}>{s}</button>)}</div>}</div>)}{staff&&<textarea placeholder="Note de conciliation" value={notes} onChange={e=>setNotes(e.target.value)}/>}</div>
  <div className="panel"><h3>Audiences</h3>{hearings.map(x=><div className="row" key={x.id}><b>{new Date(x.scheduled_at).toLocaleString("fr-FR")}</b><span>{x.room||"Salle —"} · {x.status}</span></div>)}</div>
  <div className="panel"><h3>Décisions</h3>{dec.map(x=><div className="row" key={x.id}><b>{x.decision_reference||"Décision"}</b><span>{new Date(x.created_at).toLocaleString("fr-FR")}</span><p>{x.content}</p></div>)}{userRole==="MAGISTRAT"||userRole==="ADMIN"?<><input placeholder="Référence décision" value={decisionRef} onChange={e=>setDecisionRef(e.target.value)}/><textarea placeholder="Contenu de la décision" value={decision} onChange={e=>setDecision(e.target.value)}/><button disabled={busy||decision.trim().length<10} onClick={()=>act(()=>createDecision(c.id,{reference:decisionRef,content:decision}))}>Enregistrer la décision</button></>:null}</div>
- {staff&&<div className="panel"><h3>Journal d'audit</h3>{audit.map(x=><div className="row" key={x.id}><b>{x.action}</b><span>{new Date(x.created_at).toLocaleString("fr-FR")} · {x.actor_name||x.actor_id}</span><small>{x.actor_role||x.current_actor_role||"SYSTEM"} · {JSON.stringify(x.metadata||{})}</small></div>)}</div>}
+ {staff&&<div className="panel"><h3>Journal d’audit</h3><p className="auditIntro">Historique des opérations métier et des changements de procédure du dossier.</p>{audit.filter(x=>auditBusinessLabel(x)).map(x=><div className="row auditRow" key={x.id}><b>{auditBusinessLabel(x)}</b><span>{new Date(x.created_at).toLocaleString("fr-FR")} · {x.actor_name||"Système"}</span><small>{x.actor_role||x.current_actor_role||"SYSTEM"} · {auditBusinessDetail(x)}</small></div>)}</div>}
  </div></section>
 }
 
