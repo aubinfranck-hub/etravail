@@ -170,6 +170,21 @@ CREATE TABLE IF NOT EXISTS case_requirements (
 CREATE INDEX IF NOT EXISTS idx_case_requirements_case ON case_requirements(case_id);
 CREATE INDEX IF NOT EXISTS idx_case_requirements_status ON case_requirements(status);
 
+CREATE TABLE IF NOT EXISTS case_requirement_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  case_requirement_id UUID NOT NULL REFERENCES case_requirements(id) ON DELETE CASCADE,
+  case_id UUID NOT NULL REFERENCES cases(id) ON DELETE CASCADE,
+  actor_id UUID REFERENCES users(id),
+  previous_status VARCHAR(20),
+  new_status VARCHAR(20) NOT NULL,
+  previous_document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+  new_document_id UUID REFERENCES documents(id) ON DELETE SET NULL,
+  reason TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_case_requirement_events_requirement ON case_requirement_events(case_requirement_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_case_requirement_events_case ON case_requirement_events(case_id,created_at DESC);
+
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS nature_code VARCHAR(60) DEFAULT 'AUTRE';
 ALTER TABLE cases ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_cases_due_at ON cases(due_at);
