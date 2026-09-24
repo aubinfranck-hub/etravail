@@ -4,6 +4,11 @@ import { writeAudit } from "../repositories/auditRepository.js";
 
 type PaymentSource = "COMPTABILITE" | "CAISSE" | "EXTERNE";
 
+export function paymentRequirementSatisfied(feeAmount:number|null,paymentStatus:string){
+  const fee=feeAmount===null?null:Number(feeAmount);
+  return fee===null || fee<=0 || paymentStatus==="PAYE" || paymentStatus==="EXONERE";
+}
+
 function hashCode(code:string){
   return crypto.createHash("sha256").update(code.trim()).digest("hex");
 }
@@ -102,5 +107,5 @@ export async function ensurePaymentForEnrollment(caseId:string){
   const r=await pool.query("SELECT fee_amount,payment_status FROM enrollments WHERE case_id=$1",[caseId]);
   if(!r.rowCount) return;
   const fee=r.rows[0].fee_amount===null?null:Number(r.rows[0].fee_amount);
-  if(fee!==null && fee>0 && !["PAYE","EXONERE"].includes(r.rows[0].payment_status)) throw new Error("PAYMENT_NOT_VERIFIED");
+  if(!paymentRequirementSatisfied(fee,r.rows[0].payment_status)) throw new Error("PAYMENT_NOT_VERIFIED");
 }
