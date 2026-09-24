@@ -164,6 +164,8 @@ export async function saveCaseAnswer(caseId:string,questionId:string,value:unkno
      LIMIT 1`,[questionId,caseId]);
   if(!question.rowCount) throw new Error("QUESTION_NOT_FOUND");
   if(value===undefined||value===null) throw new Error("ANSWER_REQUIRED");
+  validateQuestionAnswer(String(question.rows[0].answer_type),value);
+  await validateQuestionOptions(questionId,String(question.rows[0].answer_type),value);
   const r=await pool.query(
     `INSERT INTO case_answers(case_id,question_id,value,answered_by)
      VALUES($1,$2,$3::jsonb,$4)
