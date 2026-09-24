@@ -40,3 +40,7 @@ export function updateWorkflowRequirement(id:string,input:any){return api(`/admi
 
 export function getAdminPermissions(){return api("/admin/permissions");}
 export function updateAdminPermission(input:{role:string;permission:string;enabled:boolean}){return api("/admin/permissions",{method:"PATCH",body:JSON.stringify(input)});}
+
+
+export async function getCaseQuestions(id:string){return api(`/cases/${id}/questions`);}
+export async function saveCaseQuestion(id:string,questionId:string,value:unknown){return api(`/cases/${id}/questions/${questionId}`,{method:"PUT",body:JSON.stringify({value})});}
