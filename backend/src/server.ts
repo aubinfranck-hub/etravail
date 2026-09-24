@@ -197,12 +197,12 @@ router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req
   if(!["CITOYEN","GREFFE","MAGISTRAT","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
   try{
     const before=await findUserById(req.params.id);
+    if(!before)return res.status(404).json({error:"Utilisateur introuvable"});
+    const accessChanges=before.active!==active || before.role!==role;
+    if(accessChanges && before.active) await reassignCasesFromUser(before.id,req.user!.id);
     const updated=await updateUserAccess(req.params.id,{role,active});
     if(!updated)return res.status(404).json({error:"Utilisateur introuvable"});
-    if(before && (before.active!==updated.active || before.role!==updated.role) && (before.active || before.role!==updated.role)){
-      await reassignCasesFromUser(updated.id,req.user!.id);
-    }
-    await writeAudit({actorId:req.user!.id,action:"USER_ACCESS_CHANGED",metadata:{userId:updated.id,fromRole:before?.role??null,toRole:updated.role,fromActive:before?.active??null,toActive:updated.active}});
+    await writeAudit({actorId:req.user!.id,action:"USER_ACCESS_CHANGED",metadata:{userId:updated.id,fromRole:before.role,toRole:updated.role,fromActive:before.active,toActive:updated.active}});
     res.json({data:updated});
   }catch(e){handleError(res,e,"Impossible de modifier l'utilisateur");}
 });
