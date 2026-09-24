@@ -135,6 +135,26 @@ export async function getWorkflowQuestions(caseId:string,status:string,natureCod
   return r.rows;
 }
 
+function validateQuestionAnswer(answerType:string,value:unknown){
+  validateQuestionAnswer(String(question.rows[0].answer_type),value);\n  await validateQuestionOptions(questionId,String(question.rows[0].answer_type),value);
+  if(answerType==="BOOLEAN"&&typeof value!=="boolean") throw new Error("ANSWER_TYPE_INVALID");
+  if((answerType==="NUMBER"&& (typeof value!=="number" || !Number.isFinite(value))) ) throw new Error("ANSWER_TYPE_INVALID");
+  if((answerType==="DATE"&& (typeof value!=="string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value) || Number.isNaN(Date.parse(value)))) ) throw new Error("ANSWER_TYPE_INVALID");
+  if((answerType==="TEXT"||answerType==="LONG_TEXT")&&typeof value!=="string") throw new Error("ANSWER_TYPE_INVALID");
+  return true;
+}
+
+async function validateQuestionOptions(questionId:string,answerType:string,value:unknown){
+  if(answerType!=="SINGLE_CHOICE"&&answerType!=="MULTIPLE_CHOICE") return;
+  const values=answerType==="MULTIPLE_CHOICE"?(Array.isArray(value)?value:null):[value];
+  if(!values||values.some(v=>typeof v!=="string")) throw new Error("ANSWER_TYPE_INVALID");
+  const r=await pool.query(
+    `SELECT code FROM workflow_question_options WHERE question_id=$1 AND active=true AND code = ANY($2::text[])`,
+    [questionId,values]
+  );
+  if(r.rowCount!==values.length) throw new Error("ANSWER_OPTION_INVALID");
+}
+
 export async function saveCaseAnswer(caseId:string,questionId:string,value:unknown,actorId:string){
   const question=await pool.query(
     `SELECT wq.id,wq.answer_type,wq.required
