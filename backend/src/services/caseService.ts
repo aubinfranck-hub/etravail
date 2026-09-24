@@ -109,13 +109,6 @@ async function syncCaseRequirements(caseId:string,natureCode:string,stage:string
 
 async function seedCaseRequirements(caseId:string,natureCode:string){
   await syncCaseRequirements(caseId,natureCode,"SOUMIS");
-  const rules=await pool.query(
-    `SELECT id,code,label,required,deadline_hours,sort_order FROM workflow_requirements
-     WHERE status='SOUMIS' AND active=true AND (nature_code=$1 OR nature_code IS NULL)
-     ORDER BY sort_order ASC`,[natureCode]);
-  for(const rule of rules.rows){
-    await pool.query(`INSERT INTO case_requirements(case_id,requirement_id) VALUES($1,$2) ON CONFLICT(case_id,requirement_id) DO NOTHING`,[caseId,rule.id]);
-  }
 }
 
 export async function openCase(input:{claimantId:string;title:string;actorId:string;natureCode?:string}){
@@ -144,8 +137,11 @@ export async function getWorkflowQuestions(caseId:string,status:string,natureCod
 
 export async function saveCaseAnswer(caseId:string,questionId:string,value:unknown,actorId:string){
   const question=await pool.query(
-    `SELECT id,answer_type,required FROM workflow_questions
-     WHERE id=$1 AND active=true LIMIT 1`,[questionId]);
+    `SELECT wq.id,wq.answer_type,wq.required
+     FROM workflow_questions wq JOIN cases c ON c.id=$2
+     WHERE wq.id=$1 AND wq.active=true
+       AND (wq.nature_code=c.nature_code OR wq.nature_code IS NULL)
+     LIMIT 1`,[questionId,caseId]);
   if(!question.rowCount) throw new Error("QUESTION_NOT_FOUND");
   if(value===undefined||value===null) throw new Error("ANSWER_REQUIRED");
   const r=await pool.query(
