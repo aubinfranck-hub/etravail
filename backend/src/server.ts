@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import jwt from "jsonwebtoken";
+import crypto from "node:crypto";
 import multer from "multer";
 import {checkDatabase} from "./db.js";
 import {migrateDatabase} from "./db/migrate.js";
@@ -58,6 +59,12 @@ type Req=express.Request<Record<string,string>>&{user?:User};
 
 async function auth(req:Req,res:express.Response,next:express.NextFunction){const h=req.headers.authorization;if(!h?.startsWith("Bearer "))return res.status(401).json({error:"Authentification requise"});try{const token=jwt.verify(h.slice(7),jwtSecret) as User;const current=await findUserById(token.id);if(!current||!current.active)return res.status(401).json({error:"Compte inactif ou introuvable"});req.user={id:current.id,email:current.email,role:current.role};next();}catch{return res.status(401).json({error:"Jeton invalide"});}}
 function permission(p:string){return (req:Req,res:express.Response,next:express.NextFunction)=>req.user&&hasPermission(req.user.role,p)?next():res.status(403).json({error:"Permission refusée"});}
+function externalPaymentAuth(req:express.Request,res:express.Response,next:express.NextFunction){
+ const configured=process.env.PAYMENT_VALIDATION_API_KEY;
+ const supplied=String(req.headers["x-payment-validation-key"]??"");
+ if(!configured||!supplied||supplied.length!==configured.length||!crypto.timingSafeEqual(Buffer.from(supplied),Buffer.from(configured))) return res.status(401).json({error:"Clé d'intégration paiement invalide"});
+ next();
+}
 async function caseAccess(req:Req,id:string,write=false){const c=await findCase(id);if(!c)return null;if(req.user?.role==="CITOYEN"&&c.claimant_id!==req.user.id)return false;if((req.user?.role==="GREFFE"||req.user?.role==="MAGISTRAT")&&c.assigned_to!==req.user.id)return false;if(write&&!req.user?.role)return false;return c;}
 function handleError(res:express.Response,e:unknown,fallback:string){const code=e instanceof Error?e.message:"";const map:Record<string,[number,string]>={INVALID_SOURCE_URL:[400,"URL de source invalide"],FILE_SIGNATURE_INVALID:[415,"Contenu de fichier invalide"],INVALID_DATE:[400,"Date invalide"],DATE_IN_PAST:[400,"La date doit être future"],INVALID_STATUS:[400,"Statut invalide"],INVALID_CHANNEL:[400,"Canal invalide"],QUERY_TOO_SHORT:[400,"La recherche doit contenir au moins 2 caractères"],FILE_TYPE_NOT_ALLOWED:[415,"Type de fichier non autorisé"],FILE_TOO_LARGE:[413,"Fichier trop volumineux"],CASE_NOT_FOUND:[404,"Dossier introuvable"],INVALID_TRANSITION:[422,"Transition interdite"],ROLE_CANNOT_TRANSITION:[403,"Ce rôle ne peut pas effectuer cette transition"],REQUIRED_DOCUMENTS_MISSING:[422,"Les pièces obligatoires doivent être déposées avant la soumission"],REQUIRED_DOCUMENTS_NOT_VALIDATED:[422,"Toutes les pièces obligatoires doivent être validées avant de clôturer le contrôle"],REQUIREMENT_NOT_FOUND:[404,"Exigence de pièce introuvable"],NO_ACTIVE_ASSIGNMENT_AGENT:[409,"Aucun agent actif disponible pour l’affectation automatique"],NOTIFICATION_NOT_FOUND:[404,"Notification introuvable"],DECISION_TOO_SHORT:[400,"Décision trop courte"],INVALID_PAYMENT_AMOUNT:[400,"Montant de paiement invalide"],PAYMENT_CODE_REQUIRED:[400,"Code externe de paiement obligatoire"],PAYMENT_NOT_SETUP:[422,"Les frais du dossier ne sont pas configurés"],PAYMENT_AMOUNT_MISMATCH:[422,"Le montant du code de validation ne correspond pas aux frais du dossier"],PAYMENT_CURRENCY_MISMATCH:[422,"La devise du code de validation ne correspond pas aux frais du dossier"],PAYMENT_CODE_INVALID_OR_USED:[422,"Code de validation externe invalide ou déjà utilisé"],PAYMENT_NOT_VERIFIED:[422,"Le paiement doit être validé par la comptabilité ou la caisse avant l’enrôlement"]};const x=map[code];return x?res.status(x[0]).json({error:x[1]}):res.status(500).json({error:fallback});}
 
@@ -102,6 +109,19 @@ router.patch("/api/v1/conciliations/:id",auth,permission("hearing:manage"),async
       await transitionCase({id:existing.case_id,next:"CONCILIATION_ECHEC",actorId:req.user!.id,actorRole:req.user!.role});
     }
     res.json({data:updated});}catch(e){handleError(res,e,"Impossible de modifier la conciliation");}});
+router.post("/api/v1/integrations/payment/validation-code",externalPaymentAuth,async(req:express.Request,res:express.Response)=>{
+ try{
+  const caseId=String(req.body?.caseId??"");
+  const source=String(req.body?.source??"") as "COMPTABILITE"|"CAISSE"|"EXTERNE";
+  const code=String(req.body?.code??"");
+  const amount=Number(req.body?.amount);
+  if(!caseId||!["COMPTABILITE","CAISSE","EXTERNE"].includes(source)||!code||!Number.isFinite(amount)) return res.status(400).json({error:"caseId, source, code et amount sont obligatoires"});
+  const data=await registerExternalValidationCode({caseId,code,source,externalReference:req.body?.externalReference,amount,currency:req.body?.currency,actorId:undefined as any});
+  await writeAudit({caseId,action:"PAYMENT_EXTERNAL_SYSTEM_CODE_REGISTERED",actorRole:"SYSTEM",metadata:{validationId:data.id,source,externalReference:req.body?.externalReference??null,amount,currency:req.body?.currency??"XOF"}});
+  res.status(201).json({data});
+ }catch(e){handleError(res,e,"Enregistrement du code externe impossible");}
+});
+
 router.get("/api/v1/cases/:id/payment",auth,async(req:Req,res:express.Response)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getPayment(req.params.id)});}catch(e){handleError(res,e,"État du paiement indisponible");}});
 
 router.post("/api/v1/admin/cases/:id/payment/setup",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
