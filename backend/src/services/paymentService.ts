@@ -76,6 +76,54 @@ export async function registerExternalValidationCode(input:{
   return r.rows[0];
 }
 
+export async function confirmExternalPayment(input:{
+  caseId:string; code:string; source:PaymentSource; externalReference?:string;
+  amount:number; currency?:string;
+}){
+  if(!input.code?.trim()) throw new Error("PAYMENT_CODE_REQUIRED");
+  if(!PAYMENT_SOURCES.includes(input.source)) throw new Error("INVALID_PAYMENT_SOURCE");
+  if(!Number.isFinite(input.amount)||input.amount<0) throw new Error("INVALID_PAYMENT_AMOUNT");
+  const currency=(input.currency??"XOF").trim().toUpperCase();
+  if(!currency) throw new Error("INVALID_PAYMENT_CURRENCY");
+  const codeHash=hashCode(input.code);
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const enrollment=await client.query("SELECT * FROM enrollments WHERE case_id=$1 FOR UPDATE",[input.caseId]);
+    if(!enrollment.rowCount) throw new Error("PAYMENT_NOT_SETUP");
+    const e=enrollment.rows[0];
+    if(e.payment_status==="EXONERE") throw new Error("PAYMENT_ALREADY_EXONERATED");
+    if(e.payment_status==="PAYE") throw new Error("PAYMENT_ALREADY_FINALIZED");
+    const fee=e.fee_amount===null?null:Number(e.fee_amount);
+    if(fee!==null && fee!==Number(input.amount)) throw new Error("PAYMENT_AMOUNT_MISMATCH");
+    if(fee!==null && String(e.currency).toUpperCase()!==currency) throw new Error("PAYMENT_CURRENCY_MISMATCH");
+    const duplicate=await client.query("SELECT id FROM payment_validation_codes WHERE case_id=$1 AND code_hash=$2 LIMIT 1",[input.caseId,codeHash]);
+    if(duplicate.rowCount) throw new Error("PAYMENT_CODE_ALREADY_REGISTERED");
+
+    const now=new Date();
+    const inserted=await client.query(
+      `INSERT INTO payment_validation_codes(case_id,code_hash,source,external_reference,amount,currency,used_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7)
+       RETURNING id`,
+      [input.caseId,codeHash,input.source,input.externalReference??null,input.amount,currency,now]
+    );
+    const updated=await client.query(
+      `UPDATE enrollments SET payment_status='PAYE',payment_reference=$2,paid_at=$3,updated_at=$3
+       WHERE case_id=$1 RETURNING *`,
+      [input.caseId,input.externalReference??null,now]
+    );
+    await client.query("COMMIT");
+    await writeAudit({caseId:input.caseId,action:"PAYMENT_EXTERNAL_AUTO_VALIDATED",actorRole:"SYSTEM",
+      metadata:{validationId:inserted.rows[0].id,source:input.source,externalReference:input.externalReference??null,amount:input.amount,currency,verifiedAt:now.toISOString()}});
+    return updated.rows[0];
+  }catch(error){
+    await client.query("ROLLBACK");
+    throw error;
+  }finally{
+    client.release();
+  }
+}
+
 export async function verifyPaymentByExternalCode(input:{caseId:string;code:string;actorId:string}){
   const client=await pool.connect();
   try{

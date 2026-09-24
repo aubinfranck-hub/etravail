@@ -54,14 +54,28 @@ Ce workflow applicatif devra être aligné avec les règles de procédure effect
 
 ## Vérification des paiements
 
-Le paiement d'un dossier peut être validé par un **code externe** émis par la comptabilité, la caisse ou un système tiers.
+Le paiement d'un dossier peut être validé par un **code externe** émis par la comptabilité, la caisse ou un système tiers. Deux circuits sont possibles :
+
+### Validation directe par le système de paiement (recommandé)
 
 1. L'administration configure le montant et la devise du dossier.
-2. La comptabilité/caisse transmet un code à usage unique avec la source, le montant et la référence externe via l'intégration sécurisée.
-3. Le greffe ou l'administration saisit le code dans e-Travail.
-4. Le système vérifie le code, le montant et la devise, puis le consomme définitivement.
-5. La validation est inscrite dans le journal d'audit avec la source, la référence, le montant et l'horodatage.
-6. L'enrôlement est bloqué tant qu'un paiement obligatoire n'est pas en statut **PAYE** ou **EXONERE**.
+2. Le système chez qui le paiement est effectué (comptabilité, caisse, prestataire tiers) appelle
+   `POST /api/v1/integrations/payment/validation-code` dès qu'un paiement est confirmé de son côté,
+   avec la source, le code, le montant, la devise et la référence externe.
+3. e-Travail vérifie le montant et la devise par rapport au dossier, puis passe **directement** le
+   paiement au statut **PAYE**, sans ressaisie manuelle par le greffe.
+4. La validation est inscrite dans le journal d'audit avec la source, la référence, le montant et l'horodatage.
+
+### Saisie manuelle d'un code (paiement en guichet physique)
+
+1. La comptabilité/caisse transmet au justiciable un code à usage unique.
+2. Un agent (greffe/administration) enregistre ce code pour le dossier
+   (`POST /api/v1/admin/cases/:id/payment/validation-code`).
+3. Le greffe ou l'administration saisit ensuite le code dans e-Travail
+   (`POST /api/v1/cases/:id/payment/verify`) pour le consommer et valider le paiement.
+
+Dans les deux cas, l'enrôlement est bloqué tant qu'un paiement obligatoire n'est pas en statut
+**PAYE** ou **EXONERE**.
 
 L'intégration externe utilise la variable d'environnement `PAYMENT_VALIDATION_API_KEY` et l'en-tête `X-Payment-Validation-Key`.
 

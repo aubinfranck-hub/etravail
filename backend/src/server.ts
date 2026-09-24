@@ -26,7 +26,7 @@ import {listAudit,writeAudit,verifyAuditChain} from "./repositories/auditReposit
 import {hasPermission,listPermissions,setPermission,type Role} from "./auth/permissions.js";
 import {stageForStatus} from "./domain/workflow.js";
 import type {CaseStatus} from "./domain/workflow.js";
-import {setupPayment,getPayment,registerExternalValidationCode,verifyPaymentByExternalCode,exemptPayment} from "./services/paymentService.js";
+import {setupPayment,getPayment,registerExternalValidationCode,verifyPaymentByExternalCode,exemptPayment,confirmExternalPayment} from "./services/paymentService.js";
 import {getCaseSmsTracking,purchaseCaseSmsTracking,validateCaseSmsPayment,setCaseSmsTrackingOption} from "./services/smsService.js";
 import {listWorkflowRequirements,createWorkflowRequirement,updateWorkflowRequirement} from "./services/workflowRequirementService.js";
 
@@ -151,9 +151,8 @@ router.post("/api/v1/integrations/payment/validation-code",externalPaymentAuth,a
   const code=String(req.body?.code??"");
   const amount=Number(req.body?.amount);
   if(!caseId||!["COMPTABILITE","CAISSE","EXTERNE"].includes(source)||!code||!Number.isFinite(amount)) return res.status(400).json({error:"caseId, source, code et amount sont obligatoires"});
-  const data=await registerExternalValidationCode({caseId,code,source,externalReference:req.body?.externalReference,amount,currency:req.body?.currency,actorId:undefined as any});
-  await writeAudit({caseId,action:"PAYMENT_EXTERNAL_SYSTEM_CODE_REGISTERED",actorRole:"SYSTEM",metadata:{validationId:data.id,source,externalReference:req.body?.externalReference??null,amount,currency:req.body?.currency??"XOF"}});
-  res.status(201).json({data});
+  const data=await confirmExternalPayment({caseId,code,source,externalReference:req.body?.externalReference,amount,currency:req.body?.currency});
+  res.status(200).json({data});
  }catch(e){handleError(res,e,"Enregistrement du code externe impossible");}
 });
 
