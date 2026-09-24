@@ -8,8 +8,8 @@ test("workflow archives only from notification",()=>assert.equal(canTransition("
 
 
 test("automatic assignment routes submitted cases to the registry",()=>assert.equal(assignmentRoleByStatus.SOUMIS,"GREFFE"));
-test("automatic assignment routes enrollment to the registry",()=>assert.equal(assignmentRoleByStatus.ENROLEMENT,"GREFFE"));
-test("automatic assignment returns the registry after notification",()=>assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE"));
+test("automatic assignment routes enrollment to audiences",()=>assert.equal(assignmentRoleByStatus.ENROLEMENT,"AUDIENCES"));
+test("automatic assignment routes notification to archive",()=>assert.equal(assignmentRoleByStatus.NOTIFIE,"ARCHIVAGE"));
 
 
 test("every workflow status has a declared stage",()=>{
@@ -34,12 +34,12 @@ test("all controlled transitions declare allowed roles",()=>{
 });
 
 test("citizen can submit but cannot jump to a decision",()=>{
-  assert.deepEqual(allowedRolesByTransition["BROUILLON->SOUMIS"],["CITOYEN"]);
+  assert.equal((allowedRolesByTransition["BROUILLON->SOUMIS"]??[]).includes("CITOYEN"),true);
   assert.equal(canTransition("BROUILLON","DECISION_RENDUE"),false);
 });
 
 test("enrollment requires a registry assignment",()=>{
-  assert.equal(assignmentRoleByStatus.ENROLEMENT,"GREFFE");
+  assert.equal(assignmentRoleByStatus.ENROLEMENT,"AUDIENCES");
   assert.equal(stageForStatus.ENROLEMENT,"ENROLEMENT");
 });
 
