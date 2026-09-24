@@ -23,7 +23,7 @@ import {getDashboard} from "./services/dashboardService.js";
 import {getDecisions,issueDecision} from "./services/decisionService.js";
 import {searchLegal,addLegalSource,assistLegal} from "./services/legalService.js";
 import {listAudit,writeAudit} from "./repositories/auditRepository.js";
-import {hasPermission,type Role} from "./auth/permissions.js";
+import {hasPermission,listPermissions,setPermission,type Role} from "./auth/permissions.js";
 import type {CaseStatus} from "./domain/workflow.js";
 import {setupPayment,getPayment,registerExternalValidationCode,verifyPaymentByExternalCode} from "./services/paymentService.js";
 import {listWorkflowRequirements,createWorkflowRequirement,updateWorkflowRequirement} from "./services/workflowRequirementService.js";
@@ -199,6 +199,20 @@ router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req
   }catch(e){handleError(res,e,"Impossible de modifier l'utilisateur");}
 });
 router.get("/api/v1/admin/audit",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{try{res.json({data:await import("./repositories/auditRepository.js").then(m=>m.listAuditAll(Number(req.query.limit??500)))})}catch(e){handleError(res,e,"Audit global indisponible");}});
+router.get("/api/v1/admin/permissions",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
+ try{res.json({data:await listPermissions()});}catch(e){handleError(res,e,"Permissions indisponibles");}
+});
+router.patch("/api/v1/admin/permissions",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
+ try{
+  const role=String(req.body?.role??"") as Role;
+  const permissionName=String(req.body?.permission??"");
+  if(!["CITOYEN","GREFFE","MAGISTRAT","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
+  const item=await setPermission({role,permission:permissionName,enabled:req.body?.enabled===true,actorId:req.user!.id});
+  await writeAudit({actorId:req.user!.id,action:"ROLE_PERMISSION_CHANGED",metadata:{role,permission:permissionName,enabled:item.enabled}});
+  res.json({data:item});
+ }catch(e){handleError(res,e,"Modification de la permission impossible");}
+});
+
 router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
   try{res.json({data:await listUsers()});}catch(e){handleError(res,e,"Impossible de récupérer les utilisateurs");}
 });
