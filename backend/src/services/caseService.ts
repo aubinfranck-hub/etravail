@@ -349,13 +349,13 @@ async function autoAssign(caseId:string,role:AssignmentRole,reason:string){
   return updated;
 }
 
-async function ensureAutoAssignmentTarget(caseId:string,role:AssignmentRole){
+async function ensureAutoAssignmentTarget(caseId:string,role:AssignmentRole,nextStatus:CaseStatus){
   const current=await findCase(caseId);
   if(current?.assigned_to && current.assigned_role===role){
     const activeCurrent=await pool.query("SELECT id FROM users WHERE id=$1 AND role=$2 AND active=true LIMIT 1",[current.assigned_to,role]);
     if(activeCurrent.rowCount) return;
   }
-  const stage=stageForStatus[current?.status as CaseStatus];
+  const stage=stageForStatus[nextStatus];
   const available=await pool.query(
     "SELECT u.id FROM users u WHERE u.role=$1 AND u.active=true AND EXISTS (SELECT 1 FROM user_stage_access usa WHERE usa.user_id=u.id AND usa.stage_key=$2) LIMIT 1",
     [role,stage]
@@ -455,7 +455,7 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(input.next==="AUDIENCE") await ensureHearingExists(input.id);
   if(input.next==="DECISION_RENDUE") await ensureDecisionExists(input.id);
   const assignmentRole=assignmentRoleByStatus[input.next];
-  if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole);
+  if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole,input.next);
   const updated=await updateCaseStatus(input.id,input.next);
   if(!updated) throw new Error("CASE_NOT_FOUND");
   if(input.next==="ENROLEMENT") await ensureEnrollmentCreated(input.id,input.actorId);
