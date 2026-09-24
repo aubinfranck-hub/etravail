@@ -33,3 +33,7 @@ export async function getPayment(id:string){return api(`/cases/${id}/payment`);}
 export async function setupPayment(id:string,data:{feeAmount:number;currency?:string}){return api(`/admin/cases/${id}/payment/setup`,{method:"POST",body:JSON.stringify(data)});}
 export async function registerPaymentValidationCode(id:string,data:{code:string;source:"COMPTABILITE"|"CAISSE"|"EXTERNE";externalReference?:string;amount:number;currency?:string}){return api(`/admin/cases/${id}/payment/validation-code`,{method:"POST",body:JSON.stringify(data)});}
 export async function verifyPayment(id:string,code:string){return api(`/cases/${id}/payment/verify`,{method:"POST",body:JSON.stringify({code})});}
+
+export function getWorkflowRequirements(status?:string,natureCode?:string){const q=new URLSearchParams();if(status)q.set("status",status);if(natureCode)q.set("natureCode",natureCode);return request(`/api/v1/admin/workflow/requirements?${q.toString()}`);}
+export function createWorkflowRequirement(input:any){return request("/api/v1/admin/workflow/requirements",{method:"POST",body:JSON.stringify(input)});}
+export function updateWorkflowRequirement(id:string,input:any){return request(`/api/v1/admin/workflow/requirements/${id}`,{method:"PATCH",body:JSON.stringify(input)});}
