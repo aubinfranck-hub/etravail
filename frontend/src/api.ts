@@ -44,3 +44,6 @@ export function updateAdminPermission(input:{role:string;permission:string;enabl
 
 export async function getCaseQuestions(id:string){return api(`/cases/${id}/questions`);}
 export async function saveCaseQuestion(id:string,questionId:string,value:unknown){return api(`/cases/${id}/questions/${questionId}`,{method:"PUT",body:JSON.stringify({value})});}
+
+export async function getSmsAccount(){return api("/notifications/sms/account");}
+export async function setSmsOption(enabled:boolean){return api("/notifications/sms/option",{method:"PATCH",body:JSON.stringify({enabled})});}
