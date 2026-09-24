@@ -260,10 +260,10 @@ router.patch("/api/v1/admin/cases/:id/assignment",auth,permission("admin:manage"
  try{
   const assignedTo=req.body?.assignedTo?String(req.body.assignedTo):null;
   const assignedRole=req.body?.assignedRole?String(req.body.assignedRole):null;
-  if(assignedTo){const u=await findUserById(assignedTo);if(!u||!u.active||!["GREFFE","MAGISTRAT"].includes(u.role))return res.status(400).json({error:"Agent d'affectation invalide"}); const currentCase=await findCase(req.params.id); const stage=currentCase?stageForStatus[currentCase.status as CaseStatus]:null; if(stage){const access=await pool.query("SELECT 1 FROM user_stage_access WHERE user_id=$1 AND stage_key=$2 LIMIT 1",[assignedTo,stage]); if(!access.rowCount)return res.status(400).json({error:"Cet agent n'est pas habilité pour l'étape actuelle"});}}
+  if(assignedTo){const u=await findUserById(assignedTo);if(!u||!u.active||["CITOYEN","ADMIN"].includes(u.role))return res.status(400).json({error:"Agent d'affectation invalide"}); const currentCase=await findCase(req.params.id); const stage=currentCase?stageForStatus[currentCase.status as CaseStatus]:null; if(stage){const access=await pool.query("SELECT 1 FROM user_stage_access WHERE user_id=$1 AND stage_key=$2 LIMIT 1",[assignedTo,stage]); if(!access.rowCount)return res.status(400).json({error:"Cet agent n'est pas habilité pour l'étape actuelle"});}}
   if(assignedTo&&!assignedRole)return res.status(400).json({error:"Le rôle est obligatoire pour une affectation"});
   if(assignedTo&&assignedRole){const target=await findUserById(assignedTo);if(!target||target.role!==assignedRole)return res.status(400).json({error:"Le rôle choisi ne correspond pas à l'agent"});}
-  if(assignedRole&&!["GREFFE","MAGISTRAT"].includes(assignedRole))return res.status(400).json({error:"Rôle d'affectation invalide"});
+  if(assignedRole&&["CITOYEN","ADMIN"].includes(assignedRole))return res.status(400).json({error:"Rôle d'affectation invalide"});
   const data=await assignCaseTo({id:req.params.id,assignedTo,assignedRole,actorId:req.user!.id,reason:req.body?.reason?String(req.body.reason):undefined});
   res.json({data});
  }catch(e){handleError(res,e,"Impossible d'affecter le dossier");}
@@ -271,7 +271,7 @@ router.patch("/api/v1/admin/cases/:id/assignment",auth,permission("admin:manage"
 router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
   const role=req.body?.role as Role;
   const active=Boolean(req.body?.active);
-  if(!["CITOYEN","GREFFE","MAGISTRAT","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
+  if(!["CITOYEN","SAISINE","GREFFE","CONTROLE","ENROLEMENT","AUDIENCES","MAGISTRAT","NOTIFICATION","ARCHIVAGE","ADMIN"].includes(role))return res.status(400).json({error:"Rôle invalide"});
   try{
     const before=await findUserById(req.params.id);
     if(!before)return res.status(404).json({error:"Utilisateur introuvable"});
