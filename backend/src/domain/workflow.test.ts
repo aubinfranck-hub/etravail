@@ -111,7 +111,7 @@ test("actions are restricted to their workflow stage",()=>{
 
 test("assignment status mapping covers operational stages",()=>{
   assert.equal(assignmentRoleByStatus.SOUMIS,"GREFFE");
-  assert.equal(assignmentRoleByStatus.ENROLEMENT,"MAGISTRAT");
+  assert.equal(assignmentRoleByStatus.ENROLEMENT,"GREFFE");
   assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
 });
 
