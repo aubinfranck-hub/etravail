@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import multer from "multer";
 import {checkDatabase} from "./db.js";
 import {migrateDatabase} from "./db/migrate.js";
-import {registerCitizen,authenticate} from "./services/userService.js";
+import {registerCitizen,authenticate,createStaffAccount} from "./services/userService.js";
 import {listUsers,updateUserAccess,findUserById} from "./repositories/userRepository.js";
 import {getCases,openCase,updateCaseBasics,transitionCase,assignCaseTo,getRequirements,getEnrollment,getWorkflowQuestions,saveCaseAnswer,ensureRequiredQuestionsAnswered,ensureRequirementCanReceive,attachRequirementDocument,validateRequirement,getRequirementHistory,reassignCasesFromUser,ensureCaseMutationAllowed} from "./services/caseService.js";
 import {findCase} from "./repositories/caseRepository.js";
@@ -300,6 +300,27 @@ router.patch("/api/v1/admin/permissions",auth,permission("admin:manage"),async(r
  }catch(e){handleError(res,e,"Modification de la permission impossible");}
 });
 
+router.post("/api/v1/admin/users",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
+  try{
+    const role=String(req.body?.role??"") as "GREFFE"|"MAGISTRAT"|"ADMIN";
+    if(!["GREFFE","MAGISTRAT","ADMIN"].includes(role)) return res.status(400).json({error:"Rôle de compte interne invalide"});
+    const data=await createStaffAccount({
+      email:String(req.body?.email??"").trim(),
+      password:String(req.body?.password??""),
+      fullName:req.body?.fullName?String(req.body.fullName).trim():undefined,
+      phone:req.body?.phone?String(req.body.phone).trim():undefined,
+      role,
+      stages:Array.isArray(req.body?.stages)?req.body.stages.map(String):[],
+      createdBy:req.user!.id
+    });
+    await writeAudit({actorId:req.user!.id,action:"STAFF_ACCOUNT_CREATED",metadata:{userId:data.id,role:data.role,stageAccess:data.stage_access}});
+    res.status(201).json({data});
+  }catch(e){
+    const c=e instanceof Error?e.message:"";
+    const status=c==="EMAIL_EXISTS"?409:400;
+    res.status(status).json({error:c==="EMAIL_EXISTS"?"Email déjà utilisé":c==="PASSWORD_TOO_SHORT"?"Mot de passe trop court":c==="STAGE_REQUIRED"?"Au moins une étape doit être attribuée":"Création du compte impossible"});
+  }
+});
 router.get("/api/v1/admin/users",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
   try{res.json({data:await listUsers()});}catch(e){handleError(res,e,"Impossible de récupérer les utilisateurs");}
 });
