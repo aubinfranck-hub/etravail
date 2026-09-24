@@ -1,11 +1,17 @@
 import {pool} from "../db.js";
 
-export type Role = "CITOYEN" | "GREFFE" | "MAGISTRAT" | "ADMIN";
+export type Role = "CITOYEN" | "SAISINE" | "GREFFE" | "CONTROLE" | "ENROLEMENT" | "AUDIENCES" | "MAGISTRAT" | "NOTIFICATION" | "ARCHIVAGE" | "ADMIN";
 
 export const permissions: Record<Role, string[]> = {
   CITOYEN: ["case:create","case:read:own","case:document:own","notification:read:own","legal:read"],
+  SAISINE: ["case:read","case:transition","case:document","notification:manage","legal:read"],
   GREFFE: ["case:read","case:transition","case:document","hearing:manage","notification:manage","legal:read"],
+  CONTROLE: ["case:read","case:transition","case:document","notification:manage","legal:read"],
+  ENROLEMENT: ["case:read","case:transition","case:document","notification:manage","legal:read"],
+  AUDIENCES: ["case:read","case:transition","case:document","hearing:manage","notification:manage","legal:read"],
   MAGISTRAT: ["case:read","case:transition","case:document","hearing:manage","decision:create","notification:manage","legal:read"],
+  NOTIFICATION: ["case:read","case:transition","case:document","notification:manage","legal:read"],
+  ARCHIVAGE: ["case:read","case:transition","case:document","notification:manage","legal:read"],
   ADMIN: ["case:read","case:transition","case:document","hearing:manage","decision:create","notification:manage","admin:manage","legal:read","legal:manage"]
 };
 
