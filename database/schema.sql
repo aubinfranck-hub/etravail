@@ -173,12 +173,14 @@ CREATE TABLE IF NOT EXISTS case_requirements (
   validated_by UUID REFERENCES users(id),
   validated_at TIMESTAMPTZ,
   rejection_reason TEXT,
+  applicable BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(case_id,requirement_id)
 );
 CREATE INDEX IF NOT EXISTS idx_case_requirements_case ON case_requirements(case_id);
 CREATE INDEX IF NOT EXISTS idx_case_requirements_status ON case_requirements(status);
+CREATE INDEX IF NOT EXISTS idx_case_requirements_applicable ON case_requirements(case_id,applicable);
 
 CREATE TABLE IF NOT EXISTS case_requirement_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
