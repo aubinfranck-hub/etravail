@@ -349,3 +349,14 @@ WHERE NOT EXISTS (
   SELECT 1 FROM workflow_requirements
   WHERE status='SOUMIS' AND nature_code IS NULL AND code='CNI'
 );
+
+
+-- Habilitations opérationnelles par étape de la procédure officielle
+CREATE TABLE IF NOT EXISTS user_stage_access (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  stage_key VARCHAR(40) NOT NULL CHECK(stage_key IN ('SAISINE','GREFFE','CONTROLE','ENROLEMENT','AUDIENCES','DECISIONS','NOTIFICATION','ARCHIVAGE')),
+  granted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(user_id,stage_key)
+);
+CREATE INDEX IF NOT EXISTS idx_user_stage_access_stage ON user_stage_access(stage_key);
