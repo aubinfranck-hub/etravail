@@ -150,6 +150,11 @@ async function setDueDate(caseId:string,status:CaseStatus){
   if(hours>0) await pool.query("UPDATE cases SET due_at=CURRENT_TIMESTAMP + ($2 || ' hours')::interval WHERE id=$1",[caseId,String(hours)]);
 }
 
+async function ensureDecisionExists(caseId:string){
+  const r=await pool.query("SELECT id FROM decisions WHERE case_id=$1 LIMIT 1",[caseId]);
+  if(!r.rowCount) throw new Error("DECISION_REQUIRED");
+}
+
 export async function transitionCase(input:{id:string;next:CaseStatus;actorId:string;actorRole?:string}){
   const item=await findCase(input.id); if(!item) throw new Error("CASE_NOT_FOUND");
   if(!canTransition(item.status as CaseStatus,input.next)) throw new Error("INVALID_TRANSITION");
@@ -159,6 +164,7 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(input.next==="SOUMIS" && !requiredDocumentsSatisfied(req,"SUBMIT")) throw new Error("REQUIRED_DOCUMENTS_MISSING");
   if(input.next==="COMPLET" && !requiredDocumentsSatisfied(req,"COMPLETE")) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
   if(input.next==="ENROLEMENT") await ensurePaymentForEnrollment(input.id);
+  if(input.next==="DECISION_RENDUE") await ensureDecisionExists(input.id);
   const assignmentRole=assignmentRoleByStatus[input.next];
   if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole);
   const updated=await updateCaseStatus(input.id,input.next);
