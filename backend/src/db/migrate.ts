@@ -53,6 +53,18 @@ async function seedRolePermissions(){
   console.log("Role permissions loaded");
 }
 
+async function seedStageAccess(){
+  await pool.query(`INSERT INTO user_stage_access(user_id,stage_key)
+    SELECT u.id,stage.key FROM users u
+    CROSS JOIN (VALUES
+      ('GREFFE','GREFFE'),('GREFFE','CONTROLE'),('GREFFE','ENROLEMENT'),('GREFFE','NOTIFICATION'),('GREFFE','ARCHIVAGE'),
+      ('MAGISTRAT','AUDIENCES'),('MAGISTRAT','DECISIONS')
+    ) AS stage(role_name,key)
+    WHERE u.role=stage.role_name
+    ON CONFLICT(user_id,stage_key) DO NOTHING`);
+  console.log("Stage access seeded for existing internal accounts");
+}
+
 async function seedWorkflowRequirements(){
   // Procédure de saisine du Tribunal du Travail d'Abidjan :
   // PV de non-conciliation + requête + CNI.
@@ -138,6 +150,7 @@ export async function migrateDatabase(){
   if(adminEmail&&adminPassword) await seedUser(adminEmail,adminPassword,"ADMIN","Administrateur e-Travail");
   if(userEmail&&userPassword) await seedUser(userEmail,userPassword,"CITOYEN","Utilisateur test e-Travail");
   await seedRolePermissions();
+  await seedStageAccess();
   await seedWorkflowRequirements();
   await seedDynamicQuestionnaire();
   await backfillCaseRequirements();
