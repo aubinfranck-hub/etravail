@@ -147,6 +147,12 @@ export async function migrateDatabase(){
   const schema=await fs.readFile(path.resolve(here,"../../../database/schema.sql"),"utf8");
   await pool.query(schema);
 
+  // Upgrade constraints on existing databases when new service roles are introduced.
+  await pool.query(`ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check`);
+  await pool.query(`ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('CITOYEN','SAISINE','GREFFE','CONTROLE','ENROLEMENT','AUDIENCES','MAGISTRAT','NOTIFICATION','ARCHIVAGE','ADMIN'))`);
+  await pool.query(`ALTER TABLE role_permissions DROP CONSTRAINT IF EXISTS role_permissions_role_check`);
+  await pool.query(`ALTER TABLE role_permissions ADD CONSTRAINT role_permissions_role_check CHECK (role IN ('CITOYEN','SAISINE','GREFFE','CONTROLE','ENROLEMENT','AUDIENCES','MAGISTRAT','NOTIFICATION','ARCHIVAGE','ADMIN'))`);
+
   const adminEmail=process.env.ETRAVAIL_BOOTSTRAP_ADMIN_EMAIL;
   const adminPassword=process.env.ETRAVAIL_BOOTSTRAP_ADMIN_PASSWORD;
   const userEmail=process.env.ETRAVAIL_BOOTSTRAP_USER_EMAIL;
