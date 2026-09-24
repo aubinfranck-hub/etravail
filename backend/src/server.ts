@@ -22,7 +22,7 @@ import {searchInDocuments} from "./services/searchService.js";
 import {getDashboard} from "./services/dashboardService.js";
 import {getDecisions,issueDecision} from "./services/decisionService.js";
 import {searchLegal,addLegalSource,assistLegal} from "./services/legalService.js";
-import {listAudit,writeAudit} from "./repositories/auditRepository.js";
+import {listAudit,writeAudit,verifyAuditChain} from "./repositories/auditRepository.js";
 import {hasPermission,listPermissions,setPermission,type Role} from "./auth/permissions.js";
 import type {CaseStatus} from "./domain/workflow.js";
 import {setupPayment,getPayment,registerExternalValidationCode,verifyPaymentByExternalCode} from "./services/paymentService.js";
@@ -200,6 +200,9 @@ router.patch("/api/v1/admin/users/:id",auth,permission("admin:manage"),async(req
   }catch(e){handleError(res,e,"Impossible de modifier l'utilisateur");}
 });
 router.get("/api/v1/admin/audit",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{try{res.json({data:await import("./repositories/auditRepository.js").then(m=>m.listAuditAll(Number(req.query.limit??500)))})}catch(e){handleError(res,e,"Audit global indisponible");}});
+router.get("/api/v1/admin/audit/integrity",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
+  try{res.json({data:await verifyAuditChain()});}catch(e){handleError(res,e,"Vérification d'intégrité de l'audit indisponible");}
+});
 router.get("/api/v1/admin/permissions",auth,permission("admin:manage"),async(_req:Req,res:express.Response)=>{
  try{res.json({data:await listPermissions()});}catch(e){handleError(res,e,"Permissions indisponibles");}
 });
