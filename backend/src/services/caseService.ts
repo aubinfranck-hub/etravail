@@ -26,7 +26,18 @@ export function normalizeNature(nature:string|undefined,title:string){
   return (NATURES as readonly string[]).includes(value)?value:classifyNature(title);
 }
 
+async function syncCaseRequirements(caseId:string,natureCode:string,stage:string){
+  const rules=await pool.query(
+    `SELECT id FROM workflow_requirements
+     WHERE status=$2 AND active=true AND (nature_code=$1 OR nature_code IS NULL)
+     ORDER BY sort_order ASC`,[natureCode,stage]);
+  for(const rule of rules.rows){
+    await pool.query(`INSERT INTO case_requirements(case_id,requirement_id) VALUES($1,$2) ON CONFLICT(case_id,requirement_id) DO NOTHING`,[caseId,rule.id]);
+  }
+}
+
 async function seedCaseRequirements(caseId:string,natureCode:string){
+  await syncCaseRequirements(caseId,natureCode,"SOUMIS");
   const rules=await pool.query(
     `SELECT id,code,label,required,deadline_hours,sort_order FROM workflow_requirements
      WHERE status='SOUMIS' AND active=true AND (nature_code=$1 OR nature_code IS NULL)
@@ -51,12 +62,18 @@ export function requiredDocumentsSatisfied(state:{required_count:number;received
   return Number(state.required_count)<=Number(state.validated_count);
 }
 
-async function requiredState(caseId:string){
+function requirementStageForTransition(next:CaseStatus){
+  if(next==="SOUMIS") return "SOUMIS";
+  if(next==="COMPLET") return "A_VERIFIER";
+  return null;
+}
+
+async function requiredState(caseId:string,stage:string){
   const r=await pool.query(`SELECT COUNT(*) FILTER (WHERE wr.required)::int AS required_count,
     COUNT(*) FILTER (WHERE wr.required AND cr.status IN ('RECEIVED','VALIDATED'))::int AS received_count,
     COUNT(*) FILTER (WHERE wr.required AND cr.status='VALIDATED')::int AS validated_count
     FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
-    WHERE cr.case_id=$1 AND wr.active=true`,[caseId]);
+    WHERE cr.case_id=$1 AND wr.status=$2 AND wr.active=true`,[caseId,stage]);
   return r.rows[0]??{required_count:0,received_count:0,validated_count:0};
 }
 
@@ -210,7 +227,10 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(!canTransition(item.status as CaseStatus,input.next)) throw new Error("INVALID_TRANSITION");
   const roles=allowedRolesByTransition[`${item.status}->${input.next}`];
   if(roles&&input.actorRole&&!roles.includes(input.actorRole)) throw new Error("ROLE_CANNOT_TRANSITION");
-  const req=await requiredState(input.id);
+  const requirementStage=requirementStageForTransition(input.next);
+  const currentCaseNature=String(item.nature_code??"AUTRE");
+  if(requirementStage) await syncCaseRequirements(input.id,currentCaseNature,requirementStage);
+  const req=requirementStage?await requiredState(input.id,requirementStage):{required_count:0,received_count:0,validated_count:0};
   if(input.next==="SOUMIS" && !requiredDocumentsSatisfied(req,"SUBMIT")) throw new Error("REQUIRED_DOCUMENTS_MISSING");
   if(input.next==="COMPLET" && !requiredDocumentsSatisfied(req,"COMPLETE")) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
   if(input.next==="ENROLEMENT") await ensurePaymentForEnrollment(input.id);
