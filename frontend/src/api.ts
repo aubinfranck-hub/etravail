@@ -50,3 +50,5 @@ export async function getCaseSmsTracking(caseId:string){return api(`/cases/${cas
 export async function purchaseCaseSmsTracking(caseId:string){return api(`/cases/${caseId}/sms-tracking/purchase`,{method:"POST"});}
 export async function setCaseSmsTrackingOption(caseId:string,enabled:boolean){return api(`/cases/${caseId}/sms-tracking/option`,{method:"PATCH",body:JSON.stringify({enabled})});}
 export async function validateCaseSmsPayment(caseId:string,paymentReference?:string){return api(`/admin/cases/${caseId}/sms-tracking/validate`,{method:"POST",body:JSON.stringify({paymentReference})});}
+
+export async function createStaffAccount(data:{email:string;password:string;fullName?:string;phone?:string;role:string;stages:string[]}){return api("/admin/users",{method:"POST",body:JSON.stringify(data)});}
