@@ -1,6 +1,7 @@
 import { createHearing, listHearings } from "../repositories/hearingRepository.js";
 
 export function getHearings(caseId:string) { return listHearings(caseId); }
+export function hearingStageAllowed(status:string){return status==="AUDIENCE_PLANIFIEE";}
 
 export async function scheduleHearing(input:{caseId:string;scheduledAt:string;room?:string}) {
   const date = new Date(input.scheduledAt);
