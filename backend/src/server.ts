@@ -26,6 +26,7 @@ import {listAudit,writeAudit} from "./repositories/auditRepository.js";
 import {hasPermission,type Role} from "./auth/permissions.js";
 import type {CaseStatus} from "./domain/workflow.js";
 import {setupPayment,getPayment,registerExternalValidationCode,verifyPaymentByExternalCode} from "./services/paymentService.js";
+import {listWorkflowRequirements,createWorkflowRequirement,updateWorkflowRequirement} from "./services/workflowRequirementService.js";
 
 const app=express(), port=Number(process.env.APP_PORT??3000), isProduction=process.env.APP_ENV==="production"||process.env.NODE_ENV==="production", jwtSecret=process.env.JWT_SECRET??"development-only-change-me";
 if(isProduction&&(!process.env.JWT_SECRET||process.env.JWT_SECRET.length<32))throw new Error("JWT_SECRET must be set to at least 32 characters in production");
@@ -145,6 +146,23 @@ router.post("/api/v1/cases/:id/payment/verify",auth,async(req:Req,res:express.Re
   const data=await verifyPaymentByExternalCode({caseId:req.params.id,code:String(req.body?.code??""),actorId:req.user!.id});
   res.json({data});
  }catch(e){handleError(res,e,"Vérification du paiement impossible");}
+});
+
+router.get("/api/v1/admin/workflow/requirements",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{try{res.json({data:await listWorkflowRequirements(req.query.status?String(req.query.status):undefined,req.query.natureCode?String(req.query.natureCode):undefined)});}catch(e){handleError(res,e,"Exigences de workflow indisponibles");}});
+
+router.post("/api/v1/admin/workflow/requirements",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
+ try{
+  const item=await createWorkflowRequirement({status:String(req.body?.status??"SOUMIS"),natureCode:req.body?.natureCode?String(req.body.natureCode):null,code:String(req.body?.code??""),label:String(req.body?.label??""),required:req.body?.required!==false,deadlineHours:req.body?.deadlineHours==null?undefined:Number(req.body.deadlineHours),sortOrder:req.body?.sortOrder==null?0:Number(req.body.sortOrder),actorId:req.user!.id});
+  res.status(201).json({data:item});
+ }catch(e){handleError(res,e,"Création de l'exigence impossible");}
+});
+
+router.patch("/api/v1/admin/workflow/requirements/:id",auth,permission("admin:manage"),async(req:Req,res:express.Response)=>{
+ try{
+  const item=await updateWorkflowRequirement(req.params.id,{status:req.body?.status,natureCode:req.body?.natureCode,code:req.body?.code,label:req.body?.label,required:req.body?.required,deadlineHours:req.body?.deadlineHours,sortOrder:req.body?.sortOrder,active:req.body?.active,actorId:req.user!.id});
+  if(!item)return res.status(404).json({error:"Exigence introuvable"});
+  res.json({data:item});
+ }catch(e){handleError(res,e,"Modification de l'exigence impossible");}
 });
 
 router.get("/api/v1/cases/:id/requirements",auth,async(req:Req,res:express.Response)=>{const a=await caseAccess(req,req.params.id);if(!a)return res.status(a===null?404:403).json({error:a===null?"Dossier introuvable":"Accès refusé"});try{res.json({data:await getRequirements(req.params.id)});}catch(e){handleError(res,e,"Exigences du dossier indisponibles");}});
