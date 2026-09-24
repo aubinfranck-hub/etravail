@@ -26,8 +26,6 @@ export function normalizeNature(nature:string|undefined,title:string){
   return (NATURES as readonly string[]).includes(value)?value:classifyNature(title);
 }
 
-export async function getCases(){ return listCases(); }
-
 async function seedCaseRequirements(caseId:string,natureCode:string){
   const rules=await pool.query(
     `SELECT id,code,label,required,deadline_hours,sort_order FROM workflow_requirements
@@ -72,23 +70,70 @@ export async function getRequirements(caseId:string){
   return r.rows;
 }
 
+export async function ensureRequirementCanReceive(caseId:string,requirementId:string){
+  const r=await pool.query(
+    `SELECT cr.id,cr.status,cr.document_id,wr.code,wr.label
+     FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
+     WHERE cr.id=$1 AND cr.case_id=$2 LIMIT 1`,
+    [requirementId,caseId]
+  );
+  if(!r.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
+  if(r.rows[0].status==="VALIDATED") throw new Error("REQUIREMENT_ALREADY_VALIDATED");
+  return r.rows[0];
+}
+
 export async function attachRequirementDocument(caseId:string,requirementId:string,documentId:string,actorId:string){
   const document=await pool.query("SELECT id FROM documents WHERE id=$1 AND case_id=$2 LIMIT 1",[documentId,caseId]);
   if(!document.rowCount) throw new Error("DOCUMENT_CASE_MISMATCH");
-  const r=await pool.query(`UPDATE case_requirements SET status='RECEIVED',document_id=$1,updated_at=CURRENT_TIMESTAMP
+  const current=await ensureRequirementCanReceive(caseId,requirementId);
+  const r=await pool.query(`UPDATE case_requirements SET status='RECEIVED',document_id=$1,validated_by=NULL,validated_at=NULL,rejection_reason=NULL,updated_at=CURRENT_TIMESTAMP
     WHERE id=$2 AND case_id=$3 RETURNING *`,[documentId,requirementId,caseId]);
   if(!r.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
-  await writeAudit({actorId,caseId,action:"DOCUMENT_REQUIREMENT_RECEIVED",metadata:{requirementId,documentId}});
+  await pool.query(
+    `INSERT INTO case_requirement_events(case_requirement_id,case_id,actor_id,previous_status,new_status,previous_document_id,new_document_id,reason)
+     VALUES($1,$2,$3,$4,'RECEIVED',$5,$6,$7)`,
+    [requirementId,caseId,actorId,current.status,current.document_id,documentId,current.status==="REJECTED"?"Remplacement après rejet":current.status==="RECEIVED"?"Remplacement de la pièce reçue":null]
+  );
+  await writeAudit({actorId,caseId,action:current.document_id?"DOCUMENT_REQUIREMENT_REPLACED":"DOCUMENT_REQUIREMENT_RECEIVED",metadata:{requirementId,previousDocumentId:current.document_id,newDocumentId:documentId,previousStatus:current.status}});
   return r.rows[0];
 }
 
 export async function validateRequirement(caseId:string,requirementId:string,actorId:string,valid:boolean,reason?:string){
+  const r0=await pool.query(
+    `SELECT cr.*,d.uploaded_by FROM case_requirements cr
+     LEFT JOIN documents d ON d.id=cr.document_id
+     WHERE cr.id=$1 AND cr.case_id=$2 LIMIT 1`,
+    [requirementId,caseId]
+  );
+  if(!r0.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
+  const current=r0.rows[0];
+  if(!current.document_id) throw new Error("REQUIREMENT_DOCUMENT_REQUIRED");
+  if(current.status!=="RECEIVED") throw new Error("REQUIREMENT_NOT_RECEIVED");
+  if(String(current.uploaded_by??"")===String(actorId)) throw new Error("DOCUMENT_SELF_VALIDATION_FORBIDDEN");
+  if(!valid&&!String(reason??"").trim()) throw new Error("REQUIREMENT_REJECTION_REASON_REQUIRED");
   const status=valid?"VALIDATED":"REJECTED";
+  const cleanReason=valid?null:String(reason).trim();
   const r=await pool.query(`UPDATE case_requirements SET status=$1,validated_by=$2,validated_at=CURRENT_TIMESTAMP,rejection_reason=$3,updated_at=CURRENT_TIMESTAMP
-    WHERE id=$4 AND case_id=$5 RETURNING *`,[status,actorId,valid?null:(reason??"Pièce rejetée"),requirementId,caseId]);
-  if(!r.rowCount) throw new Error("REQUIREMENT_NOT_FOUND");
-  await writeAudit({actorId,caseId,action:valid?"DOCUMENT_VALIDATED":"DOCUMENT_REJECTED",metadata:{requirementId,status,reason:valid?null:reason}});
+    WHERE id=$4 AND case_id=$5 AND status='RECEIVED' RETURNING *`,[status,actorId,cleanReason,requirementId,caseId]);
+  if(!r.rowCount) throw new Error("REQUIREMENT_NOT_RECEIVED");
+  await pool.query(
+    `INSERT INTO case_requirement_events(case_requirement_id,case_id,actor_id,previous_status,new_status,previous_document_id,new_document_id,reason)
+     VALUES($1,$2,$3,'RECEIVED',$4,$5,$5,$6)`,
+    [requirementId,caseId,actorId,status,current.document_id,cleanReason]
+  );
+  await writeAudit({actorId,caseId,action:valid?"DOCUMENT_VALIDATED":"DOCUMENT_REJECTED",metadata:{requirementId,status,documentId:current.document_id,reason:cleanReason}});
   return r.rows[0];
+}
+
+export async function getRequirementHistory(caseId:string,requirementId:string){
+  const r=await pool.query(
+    `SELECT e.*,u.full_name AS actor_name
+     FROM case_requirement_events e LEFT JOIN users u ON u.id=e.actor_id
+     WHERE e.case_id=$1 AND e.case_requirement_id=$2
+     ORDER BY e.created_at ASC`,
+    [caseId,requirementId]
+  );
+  return r.rows;
 }
 
 async function autoAssign(caseId:string,role:"GREFFE"|"MAGISTRAT",reason:string){
