@@ -48,7 +48,7 @@ test("notification returns responsibility to the registry",()=>{
   assert.equal(stageForStatus.NOTIFIE,"NOTIFICATION");
 });
 
-import {classifyNature,normalizeNature,requiredDocumentsSatisfied} from "../services/caseService.js";
+import {classifyNature,normalizeNature,requiredDocumentsSatisfied,isEnrollmentLocked} from "../services/caseService.js";
 import {paymentRequirementSatisfied} from "../services/paymentService.js";
 import {decisionStageAllowed} from "../services/decisionService.js";
 import {conciliationStageAllowed} from "../services/conciliationService.js";
@@ -116,4 +116,18 @@ test("assignment status mapping covers operational stages",()=>{
 test("submission requirements are scoped to the target workflow stage",()=>{
   assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:2,validated_count:2},"SUBMIT"),false);
   assert.equal(requiredDocumentsSatisfied({required_count:3,received_count:3,validated_count:0},"SUBMIT"),true);
+});
+
+
+test("enrollment lock starts at enrollment and remains active through archive",()=>{
+  assert.equal(isEnrollmentLocked("COMPLET"),false);
+  for(const status of ["ENROLEMENT","CONCILIATION","CONCILIE","CONCILIATION_ECHEC","AUDIENCE_PLANIFIEE","AUDIENCE","DECISION_RENDUE","NOTIFIE","ARCHIVE"] as CaseStatus[]){
+    assert.equal(isEnrollmentLocked(status),true,status);
+  }
+});
+
+test("incomplete workflow remains editable before enrollment",()=>{
+  for(const status of ["BROUILLON","SOUMIS","RECU_GREFFE","A_VERIFIER","INCOMPLET"] as CaseStatus[]){
+    assert.equal(isEnrollmentLocked(status),false,status);
+  }
 });
