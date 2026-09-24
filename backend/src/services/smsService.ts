@@ -93,7 +93,7 @@ export async function sendPaidSms(input:{userId:string;notificationId?:string;bo
 
     const response=await fetch(providerUrl,{
       method:"POST",
-      headers:{"Content-Type":"application/json","Authorization:`Bearer ${providerKey}`},
+      headers:{"Content-Type":"application/json","Authorization":`Bearer ${providerKey}`},
       body:JSON.stringify({to:phone,message:input.body})
     });
     if(!response.ok)throw new Error("SMS_PROVIDER_FAILED");
