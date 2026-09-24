@@ -3,7 +3,7 @@ import cors from "cors";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 import multer from "multer";
-import {checkDatabase} from "./db.js";
+import {checkDatabase,pool} from "./db.js";
 import {migrateDatabase} from "./db/migrate.js";
 import {registerCitizen,authenticate,createStaffAccount} from "./services/userService.js";
 import {listUsers,updateUserAccess,findUserById} from "./repositories/userRepository.js";
@@ -259,7 +259,7 @@ router.patch("/api/v1/admin/cases/:id/assignment",auth,permission("admin:manage"
  try{
   const assignedTo=req.body?.assignedTo?String(req.body.assignedTo):null;
   const assignedRole=req.body?.assignedRole?String(req.body.assignedRole):null;
-  if(assignedTo){const u=await findUserById(assignedTo);if(!u||!u.active||!["GREFFE","MAGISTRAT"].includes(u.role))return res.status(400).json({error:"Agent d'affectation invalide"});}
+  if(assignedTo){const u=await findUserById(assignedTo);if(!u||!u.active||!["GREFFE","MAGISTRAT"].includes(u.role))return res.status(400).json({error:"Agent d'affectation invalide"}); const currentCase=await findCase(req.params.id); const stage=currentCase?stageForStatus[currentCase.status as CaseStatus]:null; if(stage){const access=await pool.query("SELECT 1 FROM user_stage_access WHERE user_id=$1 AND stage_key=$2 LIMIT 1",[assignedTo,stage]); if(!access.rowCount)return res.status(400).json({error:"Cet agent n'est pas habilité pour l'étape actuelle"});}}
   if(assignedTo&&!assignedRole)return res.status(400).json({error:"Le rôle est obligatoire pour une affectation"});
   if(assignedTo&&assignedRole){const target=await findUserById(assignedTo);if(!target||target.role!==assignedRole)return res.status(400).json({error:"Le rôle choisi ne correspond pas à l'agent"});}
   if(assignedRole&&!["GREFFE","MAGISTRAT"].includes(assignedRole))return res.status(400).json({error:"Rôle d'affectation invalide"});
