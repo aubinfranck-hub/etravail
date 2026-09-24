@@ -112,11 +112,31 @@ async function seedCaseRequirements(caseId:string,natureCode:string){
   await syncCaseRequirements(caseId,natureCode,"SOUMIS");
 }
 
+async function autoAssignNewCase(caseId:string){
+ const q=await pool.query(`SELECT u.id,u.role,COUNT(c.id)::int AS workload
+   FROM users u
+   JOIN user_stage_access usa ON usa.user_id=u.id AND usa.stage_key='SAISINE'
+   LEFT JOIN cases c ON c.assigned_to=u.id AND c.status NOT IN ('ARCHIVE')
+   WHERE u.active=true AND u.role='SAISINE'
+   GROUP BY u.id,u.role
+   ORDER BY workload ASC,u.id ASC
+   LIMIT 1`);
+ if(!q.rows[0]) return null;
+ const agent=q.rows[0];
+ const assigned=await assignCase(caseId,agent.id,agent.role);
+ if(assigned){
+   await writeAudit({actorId:agent.id,caseId,action:"CASE_AUTO_ASSIGNED",actorRole:agent.role,metadata:{stage:"SAISINE",reason:"Affectation automatique à la création"}});
+   await notify({userId:agent.id,caseId,channel:"IN_APP",subject:"Nouveau dossier à traiter",body:"Un nouveau dossier vous a été automatiquement affecté au service Saisine."});
+ }
+ return assigned;
+}
+
 export async function openCase(input:{claimantId:string;title:string;actorId:string;natureCode?:string}){
   const natureCode=normalizeNature(input.natureCode,input.title);
   const reference=`ET-${new Date().getFullYear()}-${Date.now().toString().slice(-8)}`;
   const item=await createCase({reference,title:input.title,claimantId:input.claimantId,natureCode});
   await seedCaseRequirements(item.id,natureCode);
+  await autoAssignNewCase(item.id);
   await writeAudit({actorId:input.actorId,caseId:item.id,action:"CASE_CREATED",actorRole:"CITOYEN",metadata:{reference,natureCode}});
   await writeAudit({actorId:input.actorId,caseId:item.id,action:"CASE_NATURE_CLASSIFIED",actorRole:"CITOYEN",metadata:{natureCode,source:input.natureCode?"USER":"RULE_ENGINE"}});
   return item;
