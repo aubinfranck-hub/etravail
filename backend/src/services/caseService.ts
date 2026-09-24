@@ -80,10 +80,28 @@ async function syncCaseRequirements(caseId:string,natureCode:string,stage:string
          )
        )
      ORDER BY wr.sort_order ASC`,[natureCode,stage,caseId]);
+
+  const eligible=new Set(rules.rows.map((r:{id:string})=>r.id));
+  const existing=await pool.query(
+    `SELECT cr.id,cr.requirement_id
+     FROM case_requirements cr
+     JOIN workflow_requirements wr ON wr.id=cr.requirement_id
+     WHERE cr.case_id=$1 AND wr.status=$2`,
+    [caseId,stage]
+  );
+  for(const row of existing.rows){
+    await pool.query(
+      `UPDATE case_requirements SET applicable=$1,updated_at=CURRENT_TIMESTAMP
+       WHERE id=$2`,
+      [eligible.has(row.requirement_id),row.id]
+    );
+  }
   for(const rule of rules.rows){
     await pool.query(
-      `INSERT INTO case_requirements(case_id,requirement_id)
-       VALUES($1,$2) ON CONFLICT(case_id,requirement_id) DO NOTHING`,
+      `INSERT INTO case_requirements(case_id,requirement_id,applicable)
+       VALUES($1,$2,TRUE)
+       ON CONFLICT(case_id,requirement_id) DO UPDATE SET
+         applicable=TRUE,updated_at=CURRENT_TIMESTAMP`,
       [caseId,rule.id]
     );
   }
@@ -174,7 +192,7 @@ async function requiredState(caseId:string,stage:string){
     COUNT(*) FILTER (WHERE wr.required AND cr.status IN ('RECEIVED','VALIDATED'))::int AS received_count,
     COUNT(*) FILTER (WHERE wr.required AND cr.status='VALIDATED')::int AS validated_count
     FROM case_requirements cr JOIN workflow_requirements wr ON wr.id=cr.requirement_id
-    WHERE cr.case_id=$1 AND wr.status=$2 AND wr.active=true`,[caseId,stage]);
+    WHERE cr.case_id=$1 AND wr.status=$2 AND wr.active=true AND cr.applicable=true`,[caseId,stage]);
   return r.rows[0]??{required_count:0,received_count:0,validated_count:0};
 }
 
