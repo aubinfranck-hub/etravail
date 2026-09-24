@@ -70,6 +70,52 @@ async function seedStageAccess(){
   console.log("Stage access seeded for existing internal accounts");
 }
 
+async function dedupeWorkflowRequirements(){
+  // UNIQUE(status,nature_code,code) never caught duplicates for rows where
+  // nature_code IS NULL, because SQL treats NULL <> NULL. Since this seed
+  // runs on every server boot, that let every restart re-insert the three
+  // generic filing requirements (PV_NON_CONCILIATION, REQUETE, CNI),
+  // silently multiplying the pieces a citizen must supply. Collapse
+  // existing duplicates before installing a NULL-safe unique index.
+  await pool.query(`CREATE TEMP TABLE wr_canon AS
+    SELECT DISTINCT ON (status, COALESCE(nature_code,''), code) id AS canon_id, status, nature_code, code
+    FROM workflow_requirements
+    ORDER BY status, COALESCE(nature_code,''), code, id`);
+
+  await pool.query(`DELETE FROM case_requirements cr
+    USING (
+      SELECT cr2.id,
+        ROW_NUMBER() OVER (
+          PARTITION BY cr2.case_id, c.canon_id
+          ORDER BY (cr2.document_id IS NULL),
+            CASE cr2.status WHEN 'VALIDATED' THEN 0 WHEN 'RECEIVED' THEN 1 WHEN 'REJECTED' THEN 2 ELSE 3 END,
+            cr2.id
+        ) AS rn
+      FROM case_requirements cr2
+      JOIN workflow_requirements wr ON wr.id=cr2.requirement_id
+      JOIN wr_canon c ON c.status=wr.status
+        AND COALESCE(c.nature_code,'')=COALESCE(wr.nature_code,'') AND c.code=wr.code
+    ) ranked
+    WHERE cr.id=ranked.id AND ranked.rn>1`);
+
+  await pool.query(`UPDATE case_requirements cr
+    SET requirement_id=c.canon_id
+    FROM workflow_requirements wr, wr_canon c
+    WHERE cr.requirement_id=wr.id
+      AND c.status=wr.status AND COALESCE(c.nature_code,'')=COALESCE(wr.nature_code,'') AND c.code=wr.code
+      AND wr.id<>c.canon_id`);
+
+  const removed=await pool.query(`DELETE FROM workflow_requirements wr
+    USING wr_canon c
+    WHERE c.status=wr.status AND COALESCE(c.nature_code,'')=COALESCE(wr.nature_code,'') AND c.code=wr.code
+      AND wr.id<>c.canon_id`);
+  if(removed.rowCount) console.log(`Removed ${removed.rowCount} duplicate workflow_requirements rows`);
+
+  await pool.query(`DROP TABLE wr_canon`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS uq_workflow_requirements_status_nature_code
+    ON workflow_requirements (status, COALESCE(nature_code,''), code)`);
+}
+
 async function seedWorkflowRequirements(){
   // Procédure de saisine du Tribunal du Travail d'Abidjan :
   // PV de non-conciliation + requête + CNI.
@@ -88,7 +134,7 @@ async function seedWorkflowRequirements(){
   for(const [code,label,required,order] of defaults){
     await pool.query(`INSERT INTO workflow_requirements(status,nature_code,code,label,required,sort_order,active)
       VALUES('SOUMIS',NULL,$1,$2,$3,$4,TRUE)
-      ON CONFLICT(status,nature_code,code) DO UPDATE SET
+      ON CONFLICT (status, COALESCE(nature_code,''), code) DO UPDATE SET
         label=EXCLUDED.label,required=EXCLUDED.required,sort_order=EXCLUDED.sort_order,active=TRUE`,
       [code,label,required,order]);
   }
@@ -123,7 +169,7 @@ async function seedDynamicQuestionnaire(){
     await pool.query(
       `INSERT INTO workflow_requirements(status,nature_code,code,label,required,deadline_hours,sort_order)
        VALUES('SOUMIS',$1,$2,$3,$4,$5,$6)
-       ON CONFLICT(status,nature_code,code) DO UPDATE SET
+       ON CONFLICT (status, COALESCE(nature_code,''), code) DO UPDATE SET
          label=EXCLUDED.label,required=EXCLUDED.required,deadline_hours=EXCLUDED.deadline_hours,
          sort_order=EXCLUDED.sort_order,active=true`,
       [nature,code,label,required,hours,order]
@@ -162,6 +208,7 @@ export async function migrateDatabase(){
   if(userEmail&&userPassword) await seedUser(userEmail,userPassword,"CITOYEN","Utilisateur test e-Travail");
   await seedRolePermissions();
   await seedStageAccess();
+  await dedupeWorkflowRequirements();
   await seedWorkflowRequirements();
   await seedDynamicQuestionnaire();
   await backfillCaseRequirements();
