@@ -4,6 +4,7 @@ export async function login(email:string,password:string){const d=await api("/au
 export async function getDashboard(){return api("/dashboard");}
 export async function getCases(){return api("/cases");}
 export async function createCase(title:string,natureCode?:string){return api("/cases",{method:"POST",body:JSON.stringify({title,natureCode})});}
+export async function updateCaseBasics(id:string,data:{title?:string;natureCode?:string}){return api(`/cases/${id}/basics`,{method:"PATCH",body:JSON.stringify(data)});}
 export async function getCaseParties(id:string){return api(`/cases/${id}/parties`);}
 export async function addParty(id:string,data:any){return api(`/cases/${id}/parties`,{method:"POST",body:JSON.stringify(data)});}
 export async function getCaseDocuments(id:string){return api(`/cases/${id}/documents`);}
