@@ -43,7 +43,7 @@ async function backfillCaseRequirements(){
 
 async function seedRolePermissions(){
   const entries=await import("../auth/permissions.js");
-  for(const role of Object.keys(entries.permissions) as Array<"CITOYEN"|"GREFFE"|"MAGISTRAT"|"ADMIN">){
+  for(const role of Object.keys(entries.permissions) as Array<import("../auth/permissions.js").Role>){
     for(const permission of entries.permissions[role]){
       await pool.query(`INSERT INTO role_permissions(role,permission,enabled) VALUES($1,$2,TRUE)
         ON CONFLICT(role,permission) DO NOTHING`,[role,permission]);
@@ -57,11 +57,16 @@ async function seedStageAccess(){
   await pool.query(`INSERT INTO user_stage_access(user_id,stage_key)
     SELECT u.id,stage.key FROM users u
     CROSS JOIN (VALUES
-      ('GREFFE','GREFFE'),('GREFFE','CONTROLE'),('GREFFE','ENROLEMENT'),('GREFFE','NOTIFICATION'),('GREFFE','ARCHIVAGE'),
-      ('MAGISTRAT','AUDIENCES'),('MAGISTRAT','DECISIONS')
+      ('SAISINE','SAISINE'),('GREFFE','GREFFE'),('GREFFE','CONTROLE'),('GREFFE','ENROLEMENT'),('GREFFE','NOTIFICATION'),('GREFFE','ARCHIVAGE'),
+      ('CONTROLE','CONTROLE'),('ENROLEMENT','ENROLEMENT'),('AUDIENCES','AUDIENCES'),('MAGISTRAT','AUDIENCES'),('MAGISTRAT','DECISIONS'),
+      ('NOTIFICATION','NOTIFICATION'),('ARCHIVAGE','ARCHIVAGE')
     ) AS stage(role_name,key)
     WHERE u.role=stage.role_name
     ON CONFLICT(user_id,stage_key) DO NOTHING`);
+  await pool.query(`INSERT INTO user_stage_access(user_id,stage_key)
+    SELECT u.id,s.key FROM users u CROSS JOIN (VALUES
+      ('SAISINE'),('GREFFE'),('CONTROLE'),('ENROLEMENT'),('AUDIENCES'),('DECISIONS'),('NOTIFICATION'),('ARCHIVAGE')
+    ) AS s(key) WHERE u.role='ADMIN' ON CONFLICT(user_id,stage_key) DO NOTHING`);
   console.log("Stage access seeded for existing internal accounts");
 }
 
