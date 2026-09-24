@@ -105,3 +105,10 @@ test("actions are restricted to their workflow stage",()=>{
   assert.equal(decisionStageAllowed("AUDIENCE"),true);
   assert.equal(decisionStageAllowed("AUDIENCE_PLANIFIEE"),false);
 });
+
+
+test("assignment status mapping covers operational stages",()=>{
+  assert.equal(assignmentRoleByStatus.SOUMIS,"GREFFE");
+  assert.equal(assignmentRoleByStatus.ENROLEMENT,"MAGISTRAT");
+  assert.equal(assignmentRoleByStatus.NOTIFIE,"GREFFE");
+});
