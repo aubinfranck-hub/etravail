@@ -23,11 +23,21 @@ async function seedUser(email:string,password:string,role:"ADMIN"|"CITOYEN",full
 
 
 async function backfillCaseRequirements(){
-  await pool.query(`INSERT INTO case_requirements(case_id,requirement_id)
-    SELECT c.id,wr.id FROM cases c JOIN workflow_requirements wr ON wr.status='SOUMIS' AND wr.active=true
+  await pool.query(`INSERT INTO case_requirements(case_id,requirement_id,applicable)
+    SELECT c.id,wr.id,TRUE
+    FROM cases c JOIN workflow_requirements wr
+      ON wr.status='SOUMIS' AND wr.active=true
       AND (wr.nature_code=c.nature_code OR wr.nature_code IS NULL)
-    WHERE NOT EXISTS (SELECT 1 FROM case_requirements cr WHERE cr.case_id=c.id)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM workflow_requirement_rules rr
+      WHERE rr.requirement_id=wr.id AND rr.active=true
+    )
     ON CONFLICT(case_id,requirement_id) DO NOTHING`);
+  await pool.query(`UPDATE case_requirements cr SET applicable=FALSE,updated_at=CURRENT_TIMESTAMP
+    WHERE EXISTS (
+      SELECT 1 FROM workflow_requirement_rules rr
+      WHERE rr.requirement_id=cr.requirement_id AND rr.active=true
+    )`);
 }
 
 
