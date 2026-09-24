@@ -447,7 +447,7 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(trackingEvent){
     const claimantId=String(updated.claimant_id??"");
     if(claimantId){
-      try{ await sendTrackingSms({userId:claimantId,caseId:input.id,event:trackingEvent}); }
+      try{ await sendTrackingSms({caseId:input.id,event:trackingEvent,actorId:input.actorId}); }
       catch(error){
         await writeAudit({actorId:input.actorId,caseId:input.id,action:"SMS_TRACKING_NOT_SENT",metadata:{event:trackingEvent,reason:error instanceof Error?error.message:"SMS_FAILED"}});
       }
