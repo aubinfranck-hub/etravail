@@ -81,15 +81,18 @@ async function seedWorkflowRequirements(){
 }
 
 async function seedDynamicQuestionnaire(){
+  await pool.query(`UPDATE workflow_questions SET active=FALSE
+    WHERE status='SAISINE' AND nature_code IS NULL
+      AND code IN ('LICENCIEMENT_ECRIT','RECLAMATION_EMPLOYEUR','SALAIRE_IMPAYE_PERIODE')`);
   const questions=[
-    ["SAISINE","LICENCIEMENT_ECRIT","Le licenciement a-t-il été notifié par écrit ?","BOOLEAN",true,10],
-    ["SAISINE","RECLAMATION_EMPLOYEUR","Avez-vous déjà adressé une réclamation à l'employeur concernant ce litige ?","BOOLEAN",true,20],
-    ["SAISINE","SALAIRE_IMPAYE_PERIODE","La période de salaire impayé est-elle précisément identifiable ?","BOOLEAN",true,30]
+    ["SAISINE","LICENCIEMENT","LICENCIEMENT_ECRIT","Le licenciement a-t-il été notifié par écrit ?","BOOLEAN",true,10],
+    ["SAISINE","LICENCIEMENT","RECLAMATION_EMPLOYEUR","Avez-vous déjà adressé une réclamation à l'employeur concernant ce litige ?","BOOLEAN",true,20],
+    ["SAISINE","SALAIRE_IMPAYE","SALAIRE_IMPAYE_PERIODE","La période de salaire impayé est-elle précisément identifiable ?","BOOLEAN",true,10]
   ];
-  for(const [status,code,label,type,required,sort] of questions){
+  for(const [status,nature,code,label,type,required,sort] of questions){
     await pool.query(
       `INSERT INTO workflow_questions(status,nature_code,code,label,answer_type,required,sort_order)
-       VALUES($1,NULL,$2,$3,$4,$5,$6)
+       VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(status,nature_code,code) DO UPDATE SET
          label=EXCLUDED.label,answer_type=EXCLUDED.answer_type,required=EXCLUDED.required,sort_order=EXCLUDED.sort_order,active=true`,
       [status,code,label,type,required,sort]
