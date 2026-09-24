@@ -95,7 +95,7 @@ async function seedDynamicQuestionnaire(){
        VALUES($1,$2,$3,$4,$5,$6,$7)
        ON CONFLICT(status,nature_code,code) DO UPDATE SET
          label=EXCLUDED.label,answer_type=EXCLUDED.answer_type,required=EXCLUDED.required,sort_order=EXCLUDED.sort_order,active=true`,
-      [status,code,label,type,required,sort]
+      [status,nature,code,label,type,required,sort]
     );
   }
 
