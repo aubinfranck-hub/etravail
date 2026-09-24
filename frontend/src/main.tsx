@@ -137,8 +137,8 @@ function App(){
  function logout(){localStorage.removeItem("etravail_token");localStorage.removeItem("etravail_user");setReady(false)}
  function goTo(id:string){document.getElementById(id)?.scrollIntoView({behavior:"smooth",block:"start"})}
  if(!ready)return <Login onLogin={()=>setReady(true)}/>;
- const globalCounts=dashboard?.casesByStatus??[]; const stageCounts=processStages.map(s=>globalCounts.filter((x:any)=>s.statuses.includes(x.status)).reduce((n:number,x:any)=>n+Number(x.count||0),0)); const visibleCases=stageFilter?cases.filter(c=>processStages.find(s=>s.key===stageFilter)?.statuses.includes(c.status)):cases;
- const recent=[...visibleCases].slice(0,showAllRecent?visibleCases.length:5); const upcoming=showAllUpcoming?calendar:calendar.slice(0,4); const visibleNotifications=showAllNotifications?notifications:notifications.slice(0,3);
+ const upcoming=showAllUpcoming?calendar:calendar.slice(0,4); const globalCounts=dashboard?.casesByStatus??[]; const stageCounts=processStages.map(s=>globalCounts.filter((x:any)=>s.statuses.includes(x.status)).reduce((n:number,x:any)=>n+Number(x.count||0),0)); const visibleCases=stageFilter?cases.filter(c=>processStages.find(s=>s.key===stageFilter)?.statuses.includes(c.status)):cases;
+ const recent=[...visibleCases].slice(0,showAllRecent?visibleCases.length:5); const visibleNotifications=showAllNotifications?notifications:notifications.slice(0,3);
  const nav=user.role==="CITOYEN"
  ? [["home","⌂","Accueil"],["dossiers","▣","Mes dossiers"],["create","＋","Créer un dossier"],["calendar","□","Mes audiences"],["notifications","♧","Notifications"],["legal","⚖","Informations juridiques"]]
  : user.role==="ADMIN"
