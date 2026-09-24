@@ -50,6 +50,9 @@ test("notification returns responsibility to the registry",()=>{
 
 import {classifyNature,normalizeNature,requiredDocumentsSatisfied} from "../services/caseService.js";
 import {paymentRequirementSatisfied} from "../services/paymentService.js";
+import {decisionStageAllowed} from "../services/decisionService.js";
+import {conciliationStageAllowed} from "../services/conciliationService.js";
+import {hearingStageAllowed} from "../services/hearingService.js";
 
 test("nature classifier recognizes core labour disputes",()=>{
   assert.equal(classifyNature("Licenciement abusif"),"LICENCIEMENT");
@@ -91,4 +94,14 @@ test("payment must be verified before enrollment when fees are due",()=>{
 test("no-fee enrollment does not require a payment code",()=>{
   assert.equal(paymentRequirementSatisfied(0,"A_PAYER"),true);
   assert.equal(paymentRequirementSatisfied(null,"A_PAYER"),true);
+});
+
+
+test("actions are restricted to their workflow stage",()=>{
+  assert.equal(conciliationStageAllowed("CONCILIATION"),true);
+  assert.equal(conciliationStageAllowed("AUDIENCE"),false);
+  assert.equal(hearingStageAllowed("AUDIENCE_PLANIFIEE"),true);
+  assert.equal(hearingStageAllowed("CONCILIATION"),false);
+  assert.equal(decisionStageAllowed("AUDIENCE"),true);
+  assert.equal(decisionStageAllowed("AUDIENCE_PLANIFIEE"),false);
 });
