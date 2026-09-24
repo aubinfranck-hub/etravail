@@ -10,6 +10,31 @@ const NATURES = ["LICENCIEMENT","SALAIRE_IMPAYE","CONGES","RUPTURE_CONTRAT","HAR
 
 export async function getCases(){ return listCases(); }
 
+const ENROLLMENT_LOCKED_STATUSES = new Set<CaseStatus>([
+  "ENROLEMENT","CONCILIATION","CONCILIE","CONCILIATION_ECHEC",
+  "AUDIENCE_PLANIFIEE","AUDIENCE","DECISION_RENDUE","NOTIFIE","ARCHIVE"
+]);
+
+export function isEnrollmentLocked(status: CaseStatus){
+  return ENROLLMENT_LOCKED_STATUSES.has(status);
+}
+
+export async function ensureCaseMutationAllowed(caseId:string,actorRole:string,mutation:string){
+  const current=await findCase(caseId);
+  if(!current) throw new Error("CASE_NOT_FOUND");
+  if(isEnrollmentLocked(current.status as CaseStatus) && actorRole!=="ADMIN"){
+    await writeAudit({
+      caseId,
+      action:"CASE_MUTATION_BLOCKED_AFTER_ENROLLMENT",
+      actorRole,
+      metadata:{mutation,status:current.status}
+    });
+    throw new Error("CASE_ENROLLMENT_LOCKED");
+  }
+  return current;
+}
+
+
 export function classifyNature(title:string){
   const t=title.toLowerCase();
   if(/licenci|renvoi|licenciement/.test(t)) return "LICENCIEMENT";
