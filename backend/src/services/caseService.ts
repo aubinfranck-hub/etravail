@@ -93,7 +93,7 @@ async function autoAssign(caseId:string,role:"GREFFE"|"MAGISTRAT",reason:string)
     VALUES($1,$2,$3,'AUTO',$4)`,[caseId,target.id,role,reason]);
   await writeAudit({caseId,action:"CASE_AUTO_ASSIGNED",actorRole:"SYSTEM",metadata:{assignedTo:target.id,assignedRole:role,workloadBefore:Number(target.workload),reason}});
   const c=await findCase(caseId);
-  if(c) await notify({userId:target.id,caseId,channel:"IN_APP",subject:"Nouveau dossier affecté",body:`Le dossier ${c.reference} vous est affecté à l'étape ${stageForStatus(c.status as CaseStatus)}.`});
+  if(c) await notify({userId:target.id,caseId,channel:"IN_APP",subject:"Nouveau dossier affecté",body:`Le dossier ${c.reference} vous est affecté à l'étape ${stageForStatus[c.status as CaseStatus]}.`});
   return updated;
 }
 
@@ -114,7 +114,7 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   if(input.next==="SOUMIS" && Number(req.required_count)>Number(req.received_count)) throw new Error("REQUIRED_DOCUMENTS_MISSING");
   if(input.next==="COMPLET" && Number(req.required_count)>Number(req.validated_count)) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
   const updated=await updateCaseStatus(input.id,input.next);
-  await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus(input.next),requirements:req}});
+  await writeAudit({actorId:input.actorId,caseId:input.id,action:"CASE_STATUS_CHANGED",actorRole:input.actorRole,metadata:{from:item.status,to:input.next,stage:stageForStatus[input.next],requirements:req}});
   await setDueDate(input.id,input.next);
   if(input.next==="SOUMIS") await autoAssign(input.id,"GREFFE","Soumission du dossier");
   if(input.next==="ENROLEMENT") await autoAssign(input.id,"MAGISTRAT","Enrôlement après contrôle");
@@ -127,6 +127,6 @@ export async function assignCaseTo(input:{id:string;assignedTo:string|null;assig
  await pool.query(`INSERT INTO case_assignments(case_id,assigned_to,assigned_role,assigned_by,assignment_type,reason)
    VALUES($1,$2,$3,$4,$5,$6)`,[input.id,input.assignedTo,input.assignedRole,input.actorId,item.assigned_to?"REASSIGNMENT":"MANUAL",input.reason??null]);
  await writeAudit({actorId:input.actorId,caseId:input.id,action:item.assigned_to?"CASE_REASSIGNED":"CASE_ASSIGNED",metadata:{fromAssignedTo:item.assigned_to,fromAssignedRole:item.assigned_role,assignedTo:input.assignedTo,assignedRole:input.assignedRole,reason:input.reason??null}});
- if(input.assignedTo&&updated) await notify({userId:input.assignedTo,caseId:input.id,channel:"IN_APP",subject:"Dossier affecté",body:`Le dossier ${updated.reference} vous est affecté. Action requise à l'étape ${stageForStatus(updated.status as CaseStatus)}.`});
+ if(input.assignedTo&&updated) await notify({userId:input.assignedTo,caseId:input.id,channel:"IN_APP",subject:"Dossier affecté",body:`Le dossier ${updated.reference} vous est affecté. Action requise à l'étape ${stageForStatus[updated.status as CaseStatus]}.`});
  return updated;
 }
