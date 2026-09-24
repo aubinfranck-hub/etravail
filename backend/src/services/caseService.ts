@@ -48,6 +48,11 @@ export async function openCase(input:{claimantId:string;title:string;actorId:str
   return item;
 }
 
+export function requiredDocumentsSatisfied(state:{required_count:number;received_count:number;validated_count:number},mode:"SUBMIT"|"COMPLETE"){
+  if(mode==="SUBMIT") return Number(state.required_count)<=Number(state.received_count);
+  return Number(state.required_count)<=Number(state.validated_count);
+}
+
 async function requiredState(caseId:string){
   const r=await pool.query(`SELECT COUNT(*) FILTER (WHERE wr.required)::int AS required_count,
     COUNT(*) FILTER (WHERE wr.required AND cr.status IN ('RECEIVED','VALIDATED'))::int AS received_count,
@@ -151,8 +156,8 @@ export async function transitionCase(input:{id:string;next:CaseStatus;actorId:st
   const roles=allowedRolesByTransition[`${item.status}->${input.next}`];
   if(roles&&input.actorRole&&!roles.includes(input.actorRole)) throw new Error("ROLE_CANNOT_TRANSITION");
   const req=await requiredState(input.id);
-  if(input.next==="SOUMIS" && Number(req.required_count)>Number(req.received_count)) throw new Error("REQUIRED_DOCUMENTS_MISSING");
-  if(input.next==="COMPLET" && Number(req.required_count)>Number(req.validated_count)) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
+  if(input.next==="SOUMIS" && !requiredDocumentsSatisfied(req,"SUBMIT")) throw new Error("REQUIRED_DOCUMENTS_MISSING");
+  if(input.next==="COMPLET" && !requiredDocumentsSatisfied(req,"COMPLETE")) throw new Error("REQUIRED_DOCUMENTS_NOT_VALIDATED");
   if(input.next==="ENROLEMENT") await ensurePaymentForEnrollment(input.id);
   const assignmentRole=assignmentRoleByStatus[input.next];
   if(assignmentRole) await ensureAutoAssignmentTarget(input.id,assignmentRole);
