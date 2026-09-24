@@ -17,11 +17,19 @@ function hashCode(code:string){
 export async function setupPayment(input:{caseId:string;feeAmount:number;currency?:string;actorId:string}){
   if(!Number.isFinite(input.feeAmount)||input.feeAmount<0) throw new Error("INVALID_PAYMENT_AMOUNT");
   const currency=(input.currency??"XOF").trim().toUpperCase();
+  const existing=await pool.query("SELECT fee_amount,currency,payment_status FROM enrollments WHERE case_id=$1",[input.caseId]);
+  if(existing.rowCount){
+    const current=existing.rows[0];
+    const sameFee=Number(current.fee_amount??0)===Number(input.feeAmount);
+    const sameCurrency=String(current.currency).toUpperCase()===currency;
+    if(["PAYE","EXONERE"].includes(current.payment_status)&&(!sameFee||!sameCurrency)) throw new Error("PAYMENT_ALREADY_FINALIZED");
+  }
   const r=await pool.query(
     `INSERT INTO enrollments(case_id,fee_amount,currency,payment_status)
      VALUES($1,$2,$3,'A_PAYER')
      ON CONFLICT(case_id) DO UPDATE SET fee_amount=EXCLUDED.fee_amount,currency=EXCLUDED.currency,
-       payment_status=CASE WHEN enrollments.payment_status='PAYE' THEN enrollments.payment_status ELSE 'A_PAYER' END,
+       payment_status=CASE WHEN enrollments.payment_status IN ('PAYE','EXONERE') THEN enrollments.payment_status ELSE 'A_PAYER' END,
+       exemption_reason=CASE WHEN enrollments.payment_status='EXONERE' THEN enrollments.exemption_reason ELSE NULL END,
        updated_at=CURRENT_TIMESTAMP
      RETURNING *`,
     [input.caseId,input.feeAmount,currency]
@@ -50,10 +58,13 @@ export async function registerExternalValidationCode(input:{
   if(!Number.isFinite(input.amount)||input.amount<0) throw new Error("INVALID_PAYMENT_AMOUNT");
   const currency=(input.currency??"XOF").trim().toUpperCase();
   if(!currency) throw new Error("INVALID_PAYMENT_CURRENCY");
-  const enrollment=await pool.query("SELECT fee_amount,currency FROM enrollments WHERE case_id=$1",[input.caseId]);
+  const enrollment=await pool.query("SELECT fee_amount,currency,payment_status FROM enrollments WHERE case_id=$1",[input.caseId]);
   if(!enrollment.rowCount) throw new Error("PAYMENT_NOT_SETUP");
+  if(enrollment.rows[0].payment_status==="EXONERE") throw new Error("PAYMENT_ALREADY_EXONERATED");
   const fee=enrollment.rows[0].fee_amount===null?null:Number(enrollment.rows[0].fee_amount);
   if(fee!==null && fee!==Number(input.amount)) throw new Error("PAYMENT_AMOUNT_MISMATCH");
+  const duplicate=await pool.query("SELECT id FROM payment_validation_codes WHERE case_id=$1 AND code_hash=$2 LIMIT 1",[input.caseId,hashCode(input.code)]);
+  if(duplicate.rowCount) throw new Error("PAYMENT_CODE_ALREADY_REGISTERED");
   const r=await pool.query(
     `INSERT INTO payment_validation_codes(case_id,code_hash,source,external_reference,amount,currency,issued_by)
      VALUES($1,$2,$3,$4,$5,$6,$7)
@@ -80,6 +91,7 @@ export async function verifyPaymentByExternalCode(input:{caseId:string;code:stri
     const enrollment=await client.query("SELECT * FROM enrollments WHERE case_id=$1 FOR UPDATE",[input.caseId]);
     if(!enrollment.rowCount) throw new Error("PAYMENT_NOT_SETUP");
     const e=enrollment.rows[0];
+    if(e.payment_status==="EXONERE") throw new Error("PAYMENT_ALREADY_EXONERATED");
     const fee=e.fee_amount===null?null:Number(e.fee_amount);
     if(fee!==null && fee!==Number(v.amount)) throw new Error("PAYMENT_AMOUNT_MISMATCH");
     if(String(e.currency).toUpperCase()!==String(v.currency).toUpperCase()) throw new Error("PAYMENT_CURRENCY_MISMATCH");
@@ -111,4 +123,25 @@ export async function ensurePaymentForEnrollment(caseId:string){
   if(!r.rowCount) return;
   const fee=r.rows[0].fee_amount===null?null:Number(r.rows[0].fee_amount);
   if(!paymentRequirementSatisfied(fee,r.rows[0].payment_status)) throw new Error("PAYMENT_NOT_VERIFIED");
+}
+
+export async function exemptPayment(input:{caseId:string;actorId:string;reason:string}){
+  const reason=String(input.reason??"").trim();
+  if(!reason) throw new Error("PAYMENT_EXEMPTION_REASON_REQUIRED");
+  const r=await pool.query(
+    `UPDATE enrollments
+     SET payment_status='EXONERE',exemption_reason=$2,payment_reference=NULL,paid_at=NULL,updated_at=CURRENT_TIMESTAMP
+     WHERE case_id=$1 AND payment_status NOT IN ('PAYE','EXONERE')
+     RETURNING *`,
+    [input.caseId,reason]
+  );
+  if(!r.rowCount){
+    const current=await pool.query("SELECT payment_status FROM enrollments WHERE case_id=$1",[input.caseId]);
+    if(!current.rowCount) throw new Error("PAYMENT_NOT_SETUP");
+    if(current.rows[0].payment_status==="PAYE") throw new Error("PAYMENT_ALREADY_FINALIZED");
+    if(current.rows[0].payment_status==="EXONERE") return current.rows[0];
+    throw new Error("PAYMENT_NOT_SETUP");
+  }
+  await writeAudit({actorId:input.actorId,caseId:input.caseId,action:"PAYMENT_EXONERATED",metadata:{reason}});
+  return r.rows[0];
 }
