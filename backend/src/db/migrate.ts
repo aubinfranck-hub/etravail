@@ -266,7 +266,7 @@ async function seedLegalCorpus(){
     const content=await page.getTextContent();
     parsedText+=content.items.map((item:any)=>typeof item.str==="string"?item.str:"").join(" ")+"\n";
   }
-  await pdf.destroy();
+  await loadingTask.destroy();
 
   const articles=parseLegalArticles(parsedText);
 
