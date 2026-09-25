@@ -20,7 +20,7 @@ async function refreshDeadlineNotifications(role:string,userId:string){
 
 export async function getDashboard(role:string,userId:string){
   await refreshDeadlineNotifications(role,userId);
-  const params=role==="CITOYEN"||role==="GREFFE"||role==="MAGISTRAT"?[userId]:[];
+  const params=role==="ADMIN"?[]:[userId];
   const where=role==="CITOYEN"?"WHERE claimant_id=$1":role==="ADMIN"?"":"WHERE assigned_to=$1";
   const cases=await pool.query(`SELECT status,COUNT(*)::int AS count FROM cases ${where} GROUP BY status ORDER BY status`,params);
   const hearings=await pool.query(
